@@ -9,6 +9,32 @@ import pandas as pd
 from .general import reduce_dtype
 
 
+TRACK_COLS = [
+    "game_play",
+    "nfl_player_id",
+    "datetime",
+    "step",
+    "team",
+    "position",
+    "x_position",
+    "y_position",
+    "speed",
+    "distance",
+    "direction",
+    "orientation",
+    "acceleration",
+    "sa"
+]
+TRAIN_COLS = [
+    "game_play",
+    "step",
+    "nfl_player_id_1",
+    "nfl_player_id_2",
+    "contact",
+    "datetime"
+]
+
+
 class ModelSize(Enum):
     SMALL = 1
     MEDIUM = 2

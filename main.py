@@ -20,7 +20,9 @@ from utils.nfl import (
     add_contact_id,
     expand_contact_id,
     expand_helmet,
-    read_csv_with_cache)
+    read_csv_with_cache,
+    TRAIN_COLS,
+    TRACK_COLS)
 
 
 def get_lgb_params(cfg):
@@ -43,7 +45,14 @@ def get_lgb_params(cfg):
     return lgb_params
 
 
-def train_cv(cfg, train_df, split_defs, original_df, selected_index, calc_oof=True, search_threshold=True):
+def train_cv(
+        cfg,
+        train_df,
+        split_defs,
+        original_df,
+        selected_index,
+        calc_oof=True,
+        search_threshold=True):
     non_feature_cols = [
         "contacgt_id",
         "game_play",
@@ -150,13 +159,20 @@ def train_cv(cfg, train_df, split_defs, original_df, selected_index, calc_oof=Tr
             oof_pred_all = np.zeros(len(y_train_all))
             oof_pred_all[selected_index] = oof
             is_ground_all = original_df["nfl_player_id_2"] == -1
-            mcc = metrics(y_train_all, oof_pred_all, threshold_1, threshold_2, is_ground_all)
+            mcc = metrics(
+                y_train_all,
+                oof_pred_all,
+                threshold_1,
+                threshold_2,
+                is_ground_all)
             auc = roc_auc_score(y_train_all, oof_pred_all)
             print(
                 f"threshold: {threshold_1:.5f}, {threshold_2:.5f}, mcc: {mcc:.5f}, auc: {auc:.5f}")
 
             mcc_ground = metrics(
-                y_train_all[is_ground_all], oof_pred_all[is_ground_all], threshold_2)
+                y_train_all[is_ground_all],
+                oof_pred_all[is_ground_all],
+                threshold_2)
             mcc_non_ground = metrics(
                 y_train_all[~is_ground_all], oof_pred_all[~is_ground_all], threshold_1)
 
@@ -177,71 +193,16 @@ def train_cv(cfg, train_df, split_defs, original_df, selected_index, calc_oof=Tr
     return ret["cvbooster"], encoder, None, None
 
 
-def main(args):
-    if args.debug:
-        set_debugger()
-
-    cfg = Config(
-        EXP_NAME='exp002_remove_hard_example_large',
-        MODEL_SIZE=ModelSize.LARGE,
-        DEBUG=args.debug)
-
-    mode = 'disabled' if cfg.DEBUG else None
-    wandb.init(
-        project=cfg.PROJECT,
-        name=f'{cfg.EXP_NAME}',
-        config=cfg,
-        reinit=True,
-        mode=mode)
-
+def train(cfg):
     with timer("load file"):
-        tracking_cols = [
-            "game_play",
-            "nfl_player_id",
-            "datetime",
-            "step",
-            "team",
-            "position",
-            "x_position",
-            "y_position",
-            "speed",
-            "distance",
-            "direction",
-            "orientation",
-            "acceleration",
-            "sa"
-        ]
-        train_cols = [
-            "game_play",
-            "step",
-            "nfl_player_id_1",
-            "nfl_player_id_2",
-            "contact",
-            "datetime"
-        ]
-
         tr_tracking = read_csv_with_cache(
-            "train_player_tracking.csv", cfg, usecols=tracking_cols)
-        te_tracking = read_csv_with_cache(
-            "test_player_tracking.csv", cfg, usecols=tracking_cols)
-
+            "train_player_tracking.csv", cfg, usecols=TRACK_COLS)
         train = read_csv_with_cache(
-            "train_labels.csv", cfg, usecols=train_cols)
-        sub = read_csv_with_cache("sample_submission.csv", cfg)
-        test = expand_contact_id(sub)
-        test = pd.merge(test,
-                        te_tracking[["step",
-                                     "game_play",
-                                     "datetime"]].drop_duplicates(),
-                        on=["game_play",
-                            "step"],
-                        how="left")
-
+            "train_labels.csv", cfg, usecols=TRAIN_COLS)
         split_defs = pd.read_csv(cfg.SPLIT_FILE_PATH)
 
     with timer("assign helmet metadata"):
         train = expand_helmet(cfg, train, "train")
-        test = expand_helmet(cfg, test, "test")
         gc.collect()
 
     if cfg.DEBUG:
@@ -252,24 +213,38 @@ def main(args):
 
     asdict(cfg)
 
-    if cfg.USE_PRETRAINED_MODEL:
-        serializer = LGBMSerializer.from_file(
-            os.path.join(cfg.PRETRAINED_MODEL_PATH, "lgb"))
-        cvbooster = serializer.booster
-        encoder = serializer.encoders
-        threshold_1 = serializer.threshold_1
-        threshold_2 = serializer.threshold_2
-    else:
-        cvbooster, encoder, threshold_1, threshold_2 = train_cv(
-            cfg, train_df, split_defs, train, train_selected_index)
-        gc.collect()
+    cvbooster, encoder, threshold_1, threshold_2 = train_cv(
+        cfg, train_df, split_defs, train, train_selected_index)
+    gc.collect()
 
-        del train_df
-        gc.collect()
+    del train_df
+    gc.collect()
 
-        serializer = LGBMSerializer(
-            cvbooster, encoder, threshold_1, threshold_2)
-        serializer.to_file("lgb")
+    serializer = LGBMSerializer(cvbooster, encoder, threshold_1, threshold_2)
+    serializer.to_file("lgb")
+
+
+def predict(cfg: Config):
+    serializer = LGBMSerializer.from_file(
+        os.path.join(cfg.PRETRAINED_MODEL_PATH, "lgb"))
+    cvbooster = serializer.booster
+    encoder = serializer.encoders
+    threshold_1 = serializer.threshold_1
+    threshold_2 = serializer.threshold_2
+
+    te_tracking = read_csv_with_cache(
+        "test_player_tracking.csv", cfg, usecols=TRACK_COLS)
+
+    sub = read_csv_with_cache("sample_submission.csv", cfg)
+    test = expand_contact_id(sub)
+    test = pd.merge(test,
+                    te_tracking[["step",
+                                 "game_play",
+                                 "datetime"]].drop_duplicates(),
+                    on=["game_play",
+                        "step"],
+                    how="left")
+    test = expand_helmet(cfg, test, "test")
 
     feature_cols = cvbooster.feature_name()[0]
 
@@ -290,6 +265,29 @@ def main(args):
     test.loc[test_selected_index, 'contact'] = pred_binalized.astype(int)
     test[['contact_id', 'contact']].to_csv('submission.csv', index=False)
 
+
+def main(args):
+    if args.debug:
+        set_debugger()
+
+    cfg = Config(
+        EXP_NAME='exp002_remove_hard_example_large',
+        PRETRAINED_MODEL_PATH='./',
+        MODEL_SIZE=ModelSize.LARGE,
+        DEBUG=args.debug)
+
+    mode = 'disabled' if cfg.DEBUG else None
+    wandb.init(
+        project=cfg.PROJECT,
+        name=f'{cfg.EXP_NAME}',
+        config=cfg,
+        reinit=True,
+        mode=mode)
+
+    if not cfg.USE_PRETRAINED_MODEL:
+        train(cfg)
+    predict(cfg)
+
 # LARGE
 # threshold: 0.31710, 0.22987, mcc: 0.72922, auc: 0.99593
 # mcc(ground): 0.62898, mcc(non-ground): 0.76083
@@ -301,6 +299,7 @@ def main(args):
 # SMALL with removing hard example
 # threshold: 0.29897, 0.24560, mcc: 0.72684, auc: 0.99544
 # mcc(ground): 0.62286, mcc(non-ground): 0.75924
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
