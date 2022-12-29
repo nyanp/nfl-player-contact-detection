@@ -144,6 +144,7 @@ def plot_importance(cvbooster, figsize=(12, 20)):
     sns.boxplot(data=sorted_importance_df[plot_cols],
                 orient='h',
                 ax=ax)
+    plt.tight_layout()
     plt.savefig('importance.png')
     wandb.log({"importance": wandb.Image('importance.png')})
     plt.show()

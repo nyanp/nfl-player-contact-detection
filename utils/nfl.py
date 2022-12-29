@@ -209,7 +209,7 @@ def expand_helmet(cfg, df, phase="train"):
     return df
 
 
-def merge_cols(df, tr, use_cols):
+def merge_tracking(df, tr, use_cols):
     key_cols = ["nfl_player_id", "step", "game_play"]
     use_cols = [c for c in use_cols if c in tr.columns]
 

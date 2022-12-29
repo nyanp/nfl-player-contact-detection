@@ -1,4 +1,5 @@
 from feature_engineering.cnn_feats import add_cnn_features
+from feature_engineering.interpolate_features import interpolate_features
 from feature_engineering.point_set_matching import add_p2p_matching_features
 from feature_engineering.table import (
     add_aspect_ratio_feature, add_basic_features, add_bbox_features,
@@ -7,13 +8,13 @@ from feature_engineering.table import (
     add_t0_feature, add_tracking_agg_features, select_close_example,
     tracking_prep)
 from utils.general import timer
-from utils.nfl import merge_cols
+from utils.nfl import merge_tracking
 
 
 def make_features(df, tracking, regist):
     with timer("merge"):
         tracking = tracking_prep(tracking)
-        feature_df = merge_cols(
+        feature_df = merge_tracking(
             df,
             tracking,
             [
@@ -32,6 +33,16 @@ def make_features(df, tracking, regist):
         feature_df = add_basic_features(feature_df)
         feature_df = add_cnn_features(feature_df)
         feature_df = add_p2p_matching_features(feature_df, regist)
+        feature_df = interpolate_features(
+            feature_df,
+            window_size=11,
+            columns_to_roll=[
+                'exp028_ground',
+                'cnn_pred_Sideline',
+                'cnn_pred_Endzone',
+                'x_rel_position_offset_on_img_End',
+                'y_rel_position_offset_on_img_Side'])
+
         feature_df, close_sample_index = select_close_example(feature_df)
 
         feature_df = add_bbox_features(feature_df)
