@@ -273,7 +273,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp005_remove_hard_example_large_camaro_feats_p2p',
+        EXP_NAME='exp006_remove_hard_example_large_camaro_kmat_cnn_feats_p2p',
         PRETRAINED_MODEL_PATH='./',
         MODEL_SIZE=ModelSize.LARGE,
         DEBUG=args.debug)

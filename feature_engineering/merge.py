@@ -1,4 +1,4 @@
-from feature_engineering.camaro_feats import add_camaro_features
+from feature_engineering.cnn_feats import add_cnn_features
 from feature_engineering.point_set_matching import add_p2p_matching_features
 from feature_engineering.table import (
     add_aspect_ratio_feature, add_basic_features, add_bbox_features,
@@ -30,7 +30,7 @@ def make_features(df, tracking, regist):
 
     with timer("tracking_agg_features"):
         feature_df = add_basic_features(feature_df)
-        feature_df = add_camaro_features(feature_df)
+        feature_df = add_cnn_features(feature_df)
         feature_df = add_p2p_matching_features(feature_df, regist)
         feature_df, close_sample_index = select_close_example(feature_df)
 
