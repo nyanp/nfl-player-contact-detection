@@ -66,11 +66,11 @@ def cast_player_id(df):
     return df
 
 
-def read_csv_with_cache(filename, cfg: Config, usecols=None):
+def read_csv_with_cache(filename, cfg: Config, **kwargs):
     cache_filename = filename.split(".")[0] + ".f"
     cache_path = os.path.join(cfg.CACHE, cache_filename)
     if not os.path.exists(cache_path):
-        df = pd.read_csv(os.path.join(cfg.INPUT, filename), usecols=usecols)
+        df = pd.read_csv(os.path.join(cfg.INPUT, filename), **kwargs)
         df = reduce_dtype(cast_player_id(df))
         df.to_feather(cache_path)
     return pd.read_feather(cache_path)

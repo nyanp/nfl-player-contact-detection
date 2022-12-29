@@ -4,8 +4,8 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from utils.nfl import distance, angle_diff, merge_cols
-from utils.general import reduce_dtype, timer
+from utils.nfl import distance, angle_diff
+from utils.general import reduce_dtype
 
 
 def add_bbox_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -488,57 +488,3 @@ def select_close_example(df):
         df["nfl_player_id_2"] == -1).values
     df = df[close_sample_index]
     return df, close_sample_index
-
-
-def add_camaro_features(df):
-    exp028_df = pd.read_csv(
-        '../pipeline/output/exp028_g_only_simple_org_size_image_aug_v3_frame_noise/val_df.csv')
-    exp028_df = exp028_df.rename(columns={'preds': 'exp028_ground'})
-    merge_cols = [
-        'game_play',
-        'step',
-        'nfl_player_id_1',
-        'nfl_player_id_2',
-        'exp028_ground']
-    df = df.merge(exp028_df[merge_cols], how='left')
-    return df
-
-
-def make_features(df, tracking):
-    with timer("merge"):
-        tracking = tracking_prep(tracking)
-        feature_df = merge_cols(
-            df,
-            tracking,
-            [
-                "team", "position", "x_position", "y_position",
-                "speed", "distance", "direction", "orientation", "acceleration",
-                "sa",
-                # "direction_p1_diff", "direction_m1_diff",
-                # "orientation_p1_diff", "orientation_m1_diff",
-                # "distance_p1", "distance_m1"
-            ]
-        )
-
-    print(feature_df.shape)
-
-    with timer("tracking_agg_features"):
-        feature_df = add_basic_features(feature_df)
-        feature_df = add_camaro_features(feature_df)
-        feature_df, close_sample_index = select_close_example(feature_df)
-
-        # 追加
-        feature_df = add_bbox_features(feature_df)
-        feature_df = add_step_feature(feature_df, tracking)
-        feature_df = add_tracking_agg_features(feature_df, tracking)
-        feature_df = add_t0_feature(feature_df, tracking)
-        feature_df = add_distance_around_player(feature_df)
-        feature_df = add_aspect_ratio_feature(feature_df, False)
-        feature_df = add_misc_features_after_agg(feature_df)
-        feature_df = add_shift_of_player(
-            feature_df, tracking, [-5, 5, 10], add_diff=True, player_id="1")
-        feature_df = add_shift_of_player(
-            feature_df, tracking, [-5, 5], add_diff=True, player_id="2")
-    print(feature_df.shape)
-    # print(feature_df.columns.tolist())
-    return feature_df, close_sample_index

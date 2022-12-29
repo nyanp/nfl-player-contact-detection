@@ -7,9 +7,10 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import wandb
-from feature_engineering import make_features
+from feature_engineering.merge import make_features
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import PredefinedSplit
+from feature_engineering.point_set_matching import match_p2p_with_cache
 from utils.debugger import set_debugger
 from utils.general import (LabelEncoders, LGBMSerializer, make_oof,
                            plot_importance, timer)
@@ -195,26 +196,28 @@ def train_cv(
 
 def train(cfg):
     with timer("load file"):
-        tr_tracking = read_csv_with_cache(
-            "train_player_tracking.csv", cfg, usecols=TRACK_COLS)
-        train = read_csv_with_cache(
-            "train_labels.csv", cfg, usecols=TRAIN_COLS)
+        tr_tracking = read_csv_with_cache("train_player_tracking.csv", cfg, usecols=TRACK_COLS)
+        train_df = read_csv_with_cache("train_labels.csv", cfg, usecols=TRAIN_COLS)
         split_defs = pd.read_csv(cfg.SPLIT_FILE_PATH)
+        tr_helmets = read_csv_with_cache("train_baseline_helmets.csv", cfg)
+        tr_meta = pd.read_csv(os.path.join(cfg.INPUT, "train_video_metadata.csv"),
+                              parse_dates=["start_time", "end_time", "snap_time"])
+        tr_regist = match_p2p_with_cache("train_registration.f", tracking=tr_tracking, helmets=tr_helmets, meta=tr_meta)
 
     with timer("assign helmet metadata"):
-        train = expand_helmet(cfg, train, "train")
+        train_df = expand_helmet(cfg, train_df, "train")
         gc.collect()
 
     if cfg.DEBUG:
         print('sample small subset for debug.')
-        train = train.sample(10000)
-    train_df, train_selected_index = make_features(train, tr_tracking)
+        train_df = train_df.sample(10000)
+    train_df, train_selected_index = make_features(train_df, tr_tracking, tr_regist)
     gc.collect()
 
     asdict(cfg)
 
     cvbooster, encoder, threshold_1, threshold_2 = train_cv(
-        cfg, train_df, split_defs, train, train_selected_index)
+        cfg, train_df, split_defs, train_df, train_selected_index)
     gc.collect()
 
     del train_df
@@ -232,24 +235,26 @@ def predict(cfg: Config):
     threshold_1 = serializer.threshold_1
     threshold_2 = serializer.threshold_2
 
-    te_tracking = read_csv_with_cache(
-        "test_player_tracking.csv", cfg, usecols=TRACK_COLS)
+    with timer("load file"):
+        te_tracking = read_csv_with_cache(
+            "test_player_tracking.csv", cfg, usecols=TRACK_COLS)
 
-    sub = read_csv_with_cache("sample_submission.csv", cfg)
-    test = expand_contact_id(sub)
-    test = pd.merge(test,
-                    te_tracking[["step",
-                                 "game_play",
-                                 "datetime"]].drop_duplicates(),
-                    on=["game_play",
-                        "step"],
-                    how="left")
-    test = expand_helmet(cfg, test, "test")
+        sub = read_csv_with_cache("sample_submission.csv", cfg)
+        test_df = expand_contact_id(sub)
+        test_df = pd.merge(test_df,
+                           te_tracking[["step", "game_play", "datetime"]].drop_duplicates(),
+                           on=["game_play", "step"], how="left")
+        test_df = expand_helmet(cfg, test_df, "test")
+
+        te_helmets = read_csv_with_cache("test_baseline_helmets.csv", cfg)
+        te_meta = pd.read_csv(os.path.join(cfg.INPUT, "test_video_metadata.csv"),
+                              parse_dates=["start_time", "end_time", "snap_time"])
+        te_regist = match_p2p_with_cache("test_registration.f", tracking=te_tracking, helmets=te_helmets, meta=te_meta)
 
     feature_cols = cvbooster.feature_name()[0]
 
     with timer("make features(test)"):
-        test_df, test_selected_index = make_features(test, te_tracking)
+        test_df, test_selected_index = make_features(test_df, te_tracking, te_regist)
 
     X_test = encoder.transform(test_df[feature_cols])
     predicted = cvbooster.predict(X_test)
@@ -260,21 +265,22 @@ def predict(cfg: Config):
     pred_binalized = binarize_pred(
         avg_predicted, threshold_1, threshold_2, is_ground)
 
-    test = add_contact_id(test)
-    test['contact'] = 0
-    test.loc[test_selected_index, 'contact'] = pred_binalized.astype(int)
-    test[['contact_id', 'contact']].to_csv('submission.csv', index=False)
+    test_df = add_contact_id(test_df)
+    test_df['contact'] = 0
+    test_df.loc[test_selected_index, 'contact'] = pred_binalized.astype(int)
+    test_df[['contact_id', 'contact']].to_csv('submission.csv', index=False)
 
 
 def main(args):
-    if args.debug:
-        set_debugger()
-
     cfg = Config(
-        EXP_NAME='exp002_remove_hard_example_large',
+        EXP_NAME='exp005_remove_hard_example_large_camaro_feats_p2p',
         PRETRAINED_MODEL_PATH='./',
         MODEL_SIZE=ModelSize.LARGE,
         DEBUG=args.debug)
+
+    if args.debug:
+        set_debugger()
+        cfg.MODEL_SIZE = ModelSize.SMALL
 
     mode = 'disabled' if cfg.DEBUG else None
     wandb.init(
