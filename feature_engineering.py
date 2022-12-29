@@ -481,13 +481,13 @@ def tracking_prep(tracking):
     return tracking
 
 
-def remove_far_example(df):
+def select_close_example(df):
     # 間引く
-    is_hard_sample = np.logical_or(
+    close_sample_index = np.logical_or(
         df["distance"] <= 3,
-        df["nfl_player_id_2"] == -1)
-    df = df[is_hard_sample]
-    return df
+        df["nfl_player_id_2"] == -1).values
+    df = df[close_sample_index]
+    return df, close_sample_index
 
 
 def make_features(df, tracking):
@@ -510,7 +510,7 @@ def make_features(df, tracking):
 
     with timer("tracking_agg_features"):
         feature_df = add_basic_features(feature_df)
-        feature_df = remove_far_example(feature_df)
+        feature_df, close_sample_index = select_close_example(feature_df)
 
         # 追加
         feature_df = add_bbox_features(feature_df)
@@ -526,4 +526,4 @@ def make_features(df, tracking):
             feature_df, tracking, [-5, 5], add_diff=True, player_id="2")
     print(feature_df.shape)
     # print(feature_df.columns.tolist())
-    return feature_df
+    return feature_df, close_sample_index

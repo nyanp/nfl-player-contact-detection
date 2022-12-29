@@ -1,3 +1,4 @@
+import argparse
 import gc
 import os
 from dataclasses import asdict
@@ -20,9 +21,6 @@ from utils.nfl import (
     expand_contact_id,
     expand_helmet,
     read_csv_with_cache)
-from wandb.lightgbm import wandb_callback
-
-set_debugger()
 
 
 def get_lgb_params(cfg):
@@ -45,7 +43,7 @@ def get_lgb_params(cfg):
     return lgb_params
 
 
-def train_cv(cfg, train_df, split_defs, calc_oof=True, search_threshold=True):
+def train_cv(cfg, train_df, split_defs, original_df, selected_index, calc_oof=True, search_threshold=True):
     non_feature_cols = [
         "contacgt_id",
         "game_play",
@@ -127,7 +125,7 @@ def train_cv(cfg, train_df, split_defs, calc_oof=True, search_threshold=True):
                      callbacks=[
                          lgb.early_stopping(stopping_rounds=50, verbose=True),
                          lgb.log_evaluation(25),
-                         wandb_callback()
+                         #  wandb_callback()
                      ])
 
         for booster in ret["cvbooster"].boosters:
@@ -144,40 +142,57 @@ def train_cv(cfg, train_df, split_defs, calc_oof=True, search_threshold=True):
         np.save("oof.npy", oof)
 
         if search_threshold:
-
-            print(is_ground.mean())
-
             with timer("find best threshold"):
                 threshold_1, threshold_2 = search_best_threshold_pair(
                     y_train, oof, is_ground)
 
-            mcc = metrics(y_train, oof, threshold_1, threshold_2, is_ground)
-            auc = roc_auc_score(y_train, oof)
+            y_train_all = original_df["contact"]
+            oof_pred_all = np.zeros(len(y_train_all))
+            oof_pred_all[selected_index] = oof
+            is_ground_all = original_df["nfl_player_id_2"] == -1
+            mcc = metrics(y_train_all, oof_pred_all, threshold_1, threshold_2, is_ground_all)
+            auc = roc_auc_score(y_train_all, oof_pred_all)
             print(
                 f"threshold: {threshold_1:.5f}, {threshold_2:.5f}, mcc: {mcc:.5f}, auc: {auc:.5f}")
 
             mcc_ground = metrics(
-                y_train[is_ground], oof[is_ground], threshold_2)
+                y_train_all[is_ground_all], oof_pred_all[is_ground_all], threshold_2)
             mcc_non_ground = metrics(
-                y_train[~is_ground], oof[~is_ground], threshold_1)
+                y_train_all[~is_ground_all], oof_pred_all[~is_ground_all], threshold_1)
 
             print(
                 f"mcc(ground): {mcc_ground:.5f}, mcc(non-ground): {mcc_non_ground:.5f}")
+
+            wandb.log(dict(
+                threshold_1=threshold_1,
+                threshold_2=threshold_2,
+                mcc=mcc,
+                mcc_ground=mcc_ground,
+                mcc_non_ground=mcc_non_ground,
+                auc=auc,
+            ))
 
             return ret["cvbooster"], encoder, threshold_1, threshold_2
 
     return ret["cvbooster"], encoder, None, None
 
 
-def main():
+def main(args):
+    if args.debug:
+        set_debugger()
+
     cfg = Config(
-        EXP_NAME='exp001_remove_hard_example',
-        MODEL_SIZE=ModelSize.SMALL)
+        EXP_NAME='exp002_remove_hard_example_large',
+        MODEL_SIZE=ModelSize.LARGE,
+        DEBUG=args.debug)
+
+    mode = 'disabled' if cfg.DEBUG else None
     wandb.init(
         project=cfg.PROJECT,
         name=f'{cfg.EXP_NAME}',
         config=cfg,
-        reinit=True)
+        reinit=True,
+        mode=mode)
 
     with timer("load file"):
         tracking_cols = [
@@ -229,11 +244,11 @@ def main():
         test = expand_helmet(cfg, test, "test")
         gc.collect()
 
-    train_df = make_features(train, tr_tracking)
+    if cfg.DEBUG:
+        print('sample small subset for debug.')
+        train = train.sample(10000)
+    train_df, train_selected_index = make_features(train, tr_tracking)
     gc.collect()
-
-    # print(train_df.info())
-    train_df.to_pickle('train.pkl')
 
     asdict(cfg)
 
@@ -246,7 +261,7 @@ def main():
         threshold_2 = serializer.threshold_2
     else:
         cvbooster, encoder, threshold_1, threshold_2 = train_cv(
-            cfg, train_df, split_defs)
+            cfg, train_df, split_defs, train, train_selected_index)
         gc.collect()
 
         del train_df
@@ -259,20 +274,20 @@ def main():
     feature_cols = cvbooster.feature_name()[0]
 
     with timer("make features(test)"):
-        test_df = make_features(test, te_tracking)
+        test_df, test_selected_index = make_features(test, te_tracking)
 
     X_test = encoder.transform(test_df[feature_cols])
     predicted = cvbooster.predict(X_test)
 
     avg_predicted = np.array(predicted).mean(axis=0)
 
-    is_ground = test["nfl_player_id_2"] == -1
-    print(is_ground.mean())
+    is_ground = test_df["nfl_player_id_2"] == -1
     pred_binalized = binarize_pred(
         avg_predicted, threshold_1, threshold_2, is_ground)
 
     test = add_contact_id(test)
-    test['contact'] = pred_binalized.astype(int)
+    test['contact'] = 0
+    test.loc[test_selected_index, 'contact'] = pred_binalized.astype(int)
     test[['contact_id', 'contact']].to_csv('submission.csv', index=False)
 
 # LARGE
@@ -283,6 +298,16 @@ def main():
 # threshold: 0.19394, 0.09807, mcc: 0.68636, auc: 0.99447
 # mcc(ground): 0.56401, mcc(non-ground): 0.72784
 
+# SMALL with removing hard example
+# threshold: 0.29897, 0.24560, mcc: 0.72684, auc: 0.99544
+# mcc(ground): 0.62286, mcc(non-ground): 0.75924
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--debug", "-db", action="store_true")
+    return parser.parse_args()
+
 
 if __name__ == '__main__':
-    main()
+    args = parse_args()
+    main(args)

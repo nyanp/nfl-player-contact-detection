@@ -25,6 +25,7 @@ class Config:
     PRETRAINED_MODEL_PATH: str = "../input/nfl-baseline-oof"
     SPLIT_FILE_PATH: str = "../input/game_fold.csv"
     MODEL_SIZE: ModelSize = ModelSize.LARGE
+    DEBUG: bool = False
 
 
 def cast_player_id(df):

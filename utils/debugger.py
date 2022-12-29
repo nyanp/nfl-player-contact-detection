@@ -1,14 +1,28 @@
-import sys, os
+import sys
+import os
 
-def set_debugger(send_email=True, error_func=None):
-    if hasattr(sys.excepthook, '__name__') and sys.excepthook.__name__ in ['excepthook', 'apport_excepthook']:
+
+def set_debugger(send_email=False, error_func=None):
+    if hasattr(
+        sys.excepthook,
+        '__name__') and sys.excepthook.__name__ in [
+        'excepthook',
+            'apport_excepthook']:
         from IPython.core import ultratb
 
         class MyTB(ultratb.FormattedTB):
-            def __init__(self, mode='Plain', color_scheme='Linux', call_pdb=False,
-                         ostream=None,
-                         tb_offset=0, long_header=False, include_vars=False,
-                         check_cache=None, send_email=False, error_func=None):
+            def __init__(
+                    self,
+                    mode='Plain',
+                    color_scheme='Linux',
+                    call_pdb=False,
+                    ostream=None,
+                    tb_offset=0,
+                    long_header=False,
+                    include_vars=False,
+                    check_cache=None,
+                    send_email=False,
+                    error_func=None):
                 self.send_email = send_email
                 self.color_scheme = color_scheme
                 self.error_func = error_func
@@ -36,7 +50,8 @@ def set_debugger(send_email=True, error_func=None):
                 if etype.__name__ == 'KeyboardInterrupt':
                     return
                 else:
-                    ultratb.FormattedTB.__call__(self, etype=etype, evalue=evalue, etb=etb)
+                    ultratb.FormattedTB.__call__(
+                        self, etype=etype, evalue=evalue, etb=etb)
 
                 if self.error_func is not None:
                     try:
@@ -45,5 +60,8 @@ def set_debugger(send_email=True, error_func=None):
                         print(e)
                         pass
 
-        sys.excepthook = MyTB(call_pdb=True, send_email=send_email, error_func=error_func)
+        sys.excepthook = MyTB(
+            call_pdb=True,
+            send_email=send_email,
+            error_func=error_func)
         print('debugger has been set')

@@ -10,6 +10,7 @@ import pandas as pd
 import seaborn as sns
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import LabelEncoder
+import wandb
 
 
 @contextmanager
@@ -135,7 +136,7 @@ def plot_importance(cvbooster, figsize=(12, 20)):
     # plot top-n
     PLOT_TOP_N = 100
     plot_cols = sorted_importance_df.columns[:PLOT_TOP_N]
-    _, ax = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=figsize)
     ax.grid()
     ax.set_xscale('log')
     ax.set_ylabel('Feature')
@@ -143,4 +144,6 @@ def plot_importance(cvbooster, figsize=(12, 20)):
     sns.boxplot(data=sorted_importance_df[plot_cols],
                 orient='h',
                 ax=ax)
+    plt.savefig('importance.png')
+    wandb.log(wandb.Image('importance.png'))
     plt.show()
