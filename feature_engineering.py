@@ -8,7 +8,7 @@ from utils.nfl import distance, angle_diff, merge_cols
 from utils.general import reduce_dtype, timer
 
 
-def create_bbox_features(df: pd.DataFrame) -> pd.DataFrame:
+def add_bbox_features(df: pd.DataFrame) -> pd.DataFrame:
 
     for view in ["Sideline", "Endzone"]:
         df = add_bbox_center_distance(df, view)
@@ -481,38 +481,49 @@ def tracking_prep(tracking):
     return tracking
 
 
+def remove_far_example(df):
+    # 間引く
+    is_hard_sample = np.logical_or(
+        df["distance"] <= 3,
+        df["nfl_player_id_2"] == -1)
+    df = df[is_hard_sample]
+    return df
+
+
 def make_features(df, tracking):
     with timer("merge"):
         tracking = tracking_prep(tracking)
-        train_df = merge_cols(
+        feature_df = merge_cols(
             df,
             tracking,
             [
                 "team", "position", "x_position", "y_position",
                 "speed", "distance", "direction", "orientation", "acceleration",
                 "sa",
-                #"direction_p1_diff", "direction_m1_diff",
-                #"orientation_p1_diff", "orientation_m1_diff",
-                #"distance_p1", "distance_m1"
+                # "direction_p1_diff", "direction_m1_diff",
+                # "orientation_p1_diff", "orientation_m1_diff",
+                # "distance_p1", "distance_m1"
             ]
         )
 
-    print(train_df.shape)
+    print(feature_df.shape)
 
     with timer("tracking_agg_features"):
-        train_df = add_basic_features(train_df)
+        feature_df = add_basic_features(feature_df)
+        feature_df = remove_far_example(feature_df)
+
         # 追加
-        train_df = create_bbox_features(train_df)
-        train_df = add_step_feature(train_df, tracking)
-        train_df = add_tracking_agg_features(train_df, tracking)
-        train_df = add_t0_feature(train_df, tracking)
-        train_df = add_distance_around_player(train_df)
-        train_df = add_aspect_ratio_feature(train_df, False)
-        train_df = add_misc_features_after_agg(train_df)
-        train_df = add_shift_of_player(
-            train_df, tracking, [-5, 5, 10], add_diff=True, player_id="1")
-        train_df = add_shift_of_player(
-            train_df, tracking, [-5, 5], add_diff=True, player_id="2")
-    print(train_df.shape)
-    print(train_df.columns.tolist())
-    return train_df
+        feature_df = add_bbox_features(feature_df)
+        feature_df = add_step_feature(feature_df, tracking)
+        feature_df = add_tracking_agg_features(feature_df, tracking)
+        feature_df = add_t0_feature(feature_df, tracking)
+        feature_df = add_distance_around_player(feature_df)
+        feature_df = add_aspect_ratio_feature(feature_df, False)
+        feature_df = add_misc_features_after_agg(feature_df)
+        feature_df = add_shift_of_player(
+            feature_df, tracking, [-5, 5, 10], add_diff=True, player_id="1")
+        feature_df = add_shift_of_player(
+            feature_df, tracking, [-5, 5], add_diff=True, player_id="2")
+    print(feature_df.shape)
+    # print(feature_df.columns.tolist())
+    return feature_df

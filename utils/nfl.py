@@ -209,3 +209,18 @@ def angle_diff(s1, s2):
 
     return np.abs((diff + 180) % 360 - 180)
 
+
+def add_contact_id(df):
+    # Create contact ids
+    df["contact_id"] = (
+        df["game_play"] +
+        "_" +
+        df["step"].astype("str") +
+        "_" +
+        df["nfl_player_id_1"].astype("str") +
+        "_" +
+        df["nfl_player_id_2"].astype("str").str.replace(
+            "-1",
+            "G",
+            regex=False))
+    return df
