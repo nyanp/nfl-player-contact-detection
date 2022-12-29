@@ -211,23 +211,23 @@ def train(cfg):
     if cfg.DEBUG:
         print('sample small subset for debug.')
         train_df = train_df.sample(10000)
-    train_df, train_selected_index = make_features(train_df, tr_tracking, tr_regist)
+    train_feature_df, train_selected_index = make_features(train_df, tr_tracking, tr_regist)
     gc.collect()
 
     asdict(cfg)
 
     cvbooster, encoder, threshold_1, threshold_2 = train_cv(
-        cfg, train_df, split_defs, train_df, train_selected_index)
+        cfg, train_feature_df, split_defs, train_df, train_selected_index)
     gc.collect()
 
-    del train_df
+    del train_feature_df
     gc.collect()
 
     serializer = LGBMSerializer(cvbooster, encoder, threshold_1, threshold_2)
     serializer.to_file("lgb")
 
 
-def predict(cfg: Config):
+def inference(cfg: Config):
     serializer = LGBMSerializer.from_file(
         os.path.join(cfg.PRETRAINED_MODEL_PATH, "lgb"))
     cvbooster = serializer.booster
@@ -254,14 +254,14 @@ def predict(cfg: Config):
     feature_cols = cvbooster.feature_name()[0]
 
     with timer("make features(test)"):
-        test_df, test_selected_index = make_features(test_df, te_tracking, te_regist)
+        test_feature_df, test_selected_index = make_features(test_df, te_tracking, te_regist)
 
-    X_test = encoder.transform(test_df[feature_cols])
+    X_test = encoder.transform(test_feature_df[feature_cols])
     predicted = cvbooster.predict(X_test)
 
     avg_predicted = np.array(predicted).mean(axis=0)
 
-    is_ground = test_df["nfl_player_id_2"] == -1
+    is_ground = test_feature_df["nfl_player_id_2"] == -1
     pred_binalized = binarize_pred(
         avg_predicted, threshold_1, threshold_2, is_ground)
 
@@ -292,7 +292,7 @@ def main(args):
 
     if not cfg.USE_PRETRAINED_MODEL:
         train(cfg)
-    predict(cfg)
+    inference(cfg)
 
 # LARGE
 # threshold: 0.31710, 0.22987, mcc: 0.72922, auc: 0.99593
