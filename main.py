@@ -5,17 +5,18 @@ from dataclasses import asdict
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
+import wandb
 from feature_engineering import make_features
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import PredefinedSplit
-
+from utils.debugger import set_debugger
 from utils.general import (LabelEncoders, LGBMSerializer, make_oof,
                            plot_importance, timer)
 from utils.metrics import binarize_pred, metrics, search_best_threshold_pair
 from utils.nfl import (Config, ModelSize, expand_contact_id, expand_helmet,
                        read_csv_with_cache)
+from wandb.lightgbm import wandb_callback
 
-from utils.debugger import set_debugger
 set_debugger()
 
 
@@ -120,7 +121,8 @@ def train_cv(cfg, train_df, split_defs, calc_oof=True, search_threshold=True):
                      return_cvbooster=True,
                      callbacks=[
                          lgb.early_stopping(stopping_rounds=50, verbose=True),
-                         lgb.log_evaluation(25)
+                         lgb.log_evaluation(25),
+                         wandb_callback()
                      ])
 
         for booster in ret["cvbooster"].boosters:
@@ -198,7 +200,14 @@ def add_contact_id(df):
 
 
 def main():
-    cfg = Config(MODEL_SIZE=ModelSize.SMALL)
+    cfg = Config(
+        EXP_NAME='exp001_remove_hard_example',
+        MODEL_SIZE=ModelSize.SMALL)
+    wandb.init(
+        project=cfg.PROJECT,
+        name=f'{cfg.EXP_NAME}',
+        config=cfg,
+        reinit=True)
 
     with timer("load file"):
         tracking_cols = [
@@ -299,6 +308,11 @@ def main():
 # LARGE
 # threshold: 0.31710, 0.22987, mcc: 0.72922, auc: 0.99593
 # mcc(ground): 0.62898, mcc(non-ground): 0.76083
+
+# SMALL
+# threshold: 0.19394, 0.09807, mcc: 0.68636, auc: 0.99447
+# mcc(ground): 0.56401, mcc(non-ground): 0.72784
+
 
 if __name__ == '__main__':
     main()

@@ -17,6 +17,8 @@ class ModelSize(Enum):
 
 @dataclass
 class Config:
+    PROJECT: str = 'nfl2022-lgbm'
+    EXP_NAME: str = 'exp000'
     INPUT: str = "../input/nfl-player-contact-detection"
     CACHE: str = "./"
     USE_PRETRAINED_MODEL: bool = False
