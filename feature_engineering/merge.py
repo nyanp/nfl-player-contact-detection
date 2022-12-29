@@ -31,7 +31,7 @@ def make_features(df, tracking, regist):
     with timer("tracking_agg_features"):
         feature_df = add_basic_features(feature_df)
         feature_df = add_camaro_features(feature_df)
-        feature_df = add_p2p_matching_features(feature_df, tracking, regist)
+        feature_df = add_p2p_matching_features(feature_df, regist)
         feature_df, close_sample_index = select_close_example(feature_df)
 
         feature_df = add_bbox_features(feature_df)
