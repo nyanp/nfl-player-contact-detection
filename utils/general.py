@@ -145,5 +145,5 @@ def plot_importance(cvbooster, figsize=(12, 20)):
                 orient='h',
                 ax=ax)
     plt.savefig('importance.png')
-    wandb.log(wandb.Image('importance.png'))
+    wandb.log({"importance": wandb.Image('importance.png')})
     plt.show()

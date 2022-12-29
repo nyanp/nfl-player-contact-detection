@@ -490,6 +490,20 @@ def select_close_example(df):
     return df, close_sample_index
 
 
+def add_camaro_features(df):
+    exp028_df = pd.read_csv(
+        '../pipeline/output/exp028_g_only_simple_org_size_image_aug_v3_frame_noise/val_df.csv')
+    exp028_df = exp028_df.rename(columns={'preds': 'exp028_ground'})
+    merge_cols = [
+        'game_play',
+        'step',
+        'nfl_player_id_1',
+        'nfl_player_id_2',
+        'exp028_ground']
+    df = df.merge(exp028_df[merge_cols], how='left')
+    return df
+
+
 def make_features(df, tracking):
     with timer("merge"):
         tracking = tracking_prep(tracking)
@@ -510,6 +524,7 @@ def make_features(df, tracking):
 
     with timer("tracking_agg_features"):
         feature_df = add_basic_features(feature_df)
+        feature_df = add_camaro_features(feature_df)
         feature_df, close_sample_index = select_close_example(feature_df)
 
         # 追加

@@ -161,3 +161,4 @@ debug.en
 *.json
 *.csv
 *.npy
+*.png
