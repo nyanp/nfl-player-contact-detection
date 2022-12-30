@@ -224,11 +224,11 @@ def inference(cfg: Config):
 
         df_args = []
         if cfg.CAMARO_DF_PATH:
-            df_args.append(cfg.CAMARO_DF_PATH)
+            df_args.append(pd.read_csv(cfg.CAMARO_DF_PATH))
         if cfg.KMAT_END_DF_PATH:
-            df_args.append(cfg.KMAT_END_DF_PATH)
+            df_args.append(pd.read_csv(cfg.KMAT_END_DF_PATH))
         if cfg.KMAT_SIDE_DF_PATH:
-            df_args.append(cfg.KMAT_SIDE_DF_PATH)
+            df_args.append(pd.read_csv(cfg.KMAT_SIDE_DF_PATH))
 
     feature_cols = cvbooster.feature_name()[0]
 
