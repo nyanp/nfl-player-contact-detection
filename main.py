@@ -158,6 +158,14 @@ def train_cv(
 
 
 def train(cfg):
+    mode = 'disabled' if cfg.DEBUG else None
+    wandb.init(
+        project=cfg.PROJECT,
+        name=f'{cfg.EXP_NAME}',
+        config=cfg,
+        reinit=True,
+        mode=mode)
+
     with timer("load file"):
         tr_tracking = read_csv_with_cache("train_player_tracking.csv", cfg, usecols=TRACK_COLS)
         train_df = read_csv_with_cache("train_labels.csv", cfg, usecols=TRAIN_COLS)
@@ -255,14 +263,6 @@ def main(args):
     if args.debug:
         set_debugger()
         cfg.MODEL_SIZE = ModelSize.SMALL
-
-    mode = 'disabled' if cfg.DEBUG else None
-    wandb.init(
-        project=cfg.PROJECT,
-        name=f'{cfg.EXP_NAME}',
-        config=cfg,
-        reinit=True,
-        mode=mode)
 
     if not args.inference_only:
         train(cfg)
