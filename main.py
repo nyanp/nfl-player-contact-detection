@@ -246,7 +246,7 @@ def inference(cfg: Config):
 
     test_df = add_contact_id(test_df)
     test_df['contact'] = 0
-    test_df.loc[test_selected_index, 'contact'] = pred_binalized.astype(int)
+    test_df.loc[test_selected_index, 'contact'] = pred_binalized.astype(int).values
     test_df[['contact_id', 'contact']].to_csv('submission.csv', index=False)
 
 
