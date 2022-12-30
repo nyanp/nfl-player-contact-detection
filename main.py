@@ -23,7 +23,8 @@ from utils.nfl import (
     expand_helmet,
     read_csv_with_cache,
     TRAIN_COLS,
-    TRACK_COLS)
+    TRACK_COLS,
+    NON_FEATURE_COLS)
 
 
 def get_lgb_params(cfg):
@@ -54,44 +55,6 @@ def train_cv(
         selected_index,
         calc_oof=True,
         search_threshold=True):
-    non_feature_cols = [
-        "contacgt_id",
-        "game_play",
-        "datetime",
-        "step",
-        "nfl_player_id_1",
-        "nfl_player_id_2",
-        "contact",
-        "team_1",
-        "team_2",
-        "contact_id",
-        # "position_1",
-        # "position_2"
-        # "direction_1",
-        # "direction_2",
-        "x_position_1",
-        "x_position_2",
-        "y_position_1",
-        "y_position_2",
-        "x_position_start_1",
-        "x_position_start_2",
-        "y_position_start_1",
-        "y_position_start_2",
-
-        "x_position_future5_1",
-        "x_position_future5_2",
-        "y_position_future5_1",
-        "y_position_future5_2",
-        "x_position_past5_1",
-        "x_position_past5_2",
-        "y_position_past5_1",
-        "y_position_past5_2",
-
-        # "orientation_past5_1",
-        # "direction_past5_1",
-        # "orientation_past5_2",
-        # "direction_past5_2",
-    ]
 
     lgb_params = get_lgb_params(cfg)
 
@@ -108,7 +71,7 @@ def train_cv(
     with timer("make dataset"):
         # train_df.values.astype(np.float32)とかやるとOOMで死ぬので、箱を先に用意して値を入れていく
         feature_names = [
-            c for c in train_df.columns if c not in non_feature_cols]
+            c for c in train_df.columns if c not in NON_FEATURE_COLS]
 
         X_train = np.empty(
             (len(train_df), len(feature_names)), dtype=np.float32)
@@ -251,10 +214,18 @@ def inference(cfg: Config):
                               parse_dates=["start_time", "end_time", "snap_time"])
         te_regist = match_p2p_with_cache("test_registration.f", tracking=te_tracking, helmets=te_helmets, meta=te_meta)
 
+        df_args = []
+        if cfg.CAMARO_DF_PATH:
+            df_args.append(cfg.CAMARO_DF_PATH)
+        if cfg.KMAT_END_DF_PATH:
+            df_args.append(cfg.KMAT_END_DF_PATH)
+        if cfg.KMAT_SIDE_DF_PATH:
+            df_args.append(cfg.KMAT_SIDE_DF_PATH)
+
     feature_cols = cvbooster.feature_name()[0]
 
     with timer("make features(test)"):
-        test_feature_df, test_selected_index = make_features(test_df, te_tracking, te_regist)
+        test_feature_df, test_selected_index = make_features(test_df, te_tracking, te_regist, df_args)
 
     X_test = encoder.transform(test_feature_df[feature_cols])
     predicted = cvbooster.predict(X_test)
@@ -290,26 +261,15 @@ def main(args):
         reinit=True,
         mode=mode)
 
-    if not cfg.USE_PRETRAINED_MODEL:
+    if not args.inference_only:
         train(cfg)
     inference(cfg)
-
-# LARGE
-# threshold: 0.31710, 0.22987, mcc: 0.72922, auc: 0.99593
-# mcc(ground): 0.62898, mcc(non-ground): 0.76083
-
-# SMALL
-# threshold: 0.19394, 0.09807, mcc: 0.68636, auc: 0.99447
-# mcc(ground): 0.56401, mcc(non-ground): 0.72784
-
-# SMALL with removing hard example
-# threshold: 0.29897, 0.24560, mcc: 0.72684, auc: 0.99544
-# mcc(ground): 0.62286, mcc(non-ground): 0.75924
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", "-db", action="store_true")
+    parser.add_argument("--inference_only", "-i", action="store_true")
     return parser.parse_args()
 
 

@@ -11,7 +11,7 @@ from utils.general import timer
 from utils.nfl import merge_tracking
 
 
-def make_features(df, tracking, regist):
+def make_features(df, tracking, regist, df_args=None):
     with timer("merge"):
         tracking = tracking_prep(tracking)
         feature_df = merge_tracking(
@@ -31,7 +31,7 @@ def make_features(df, tracking, regist):
 
     with timer("tracking_agg_features"):
         feature_df = add_basic_features(feature_df)
-        feature_df = add_cnn_features(feature_df)
+        feature_df = add_cnn_features(feature_df, *df_args)
         feature_df = add_p2p_matching_features(feature_df, regist)
         feature_df = interpolate_features(
             feature_df,

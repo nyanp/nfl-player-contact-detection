@@ -2,6 +2,7 @@
 import os
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -34,6 +35,44 @@ TRAIN_COLS = [
     "datetime"
 ]
 
+NON_FEATURE_COLS = [
+    "contacgt_id",
+    "game_play",
+    "datetime",
+    "step",
+    "nfl_player_id_1",
+    "nfl_player_id_2",
+    "contact",
+    "team_1",
+    "team_2",
+    "contact_id",
+    # "position_1",
+    # "position_2"
+    # "direction_1",
+    # "direction_2",
+    "x_position_1",
+    "x_position_2",
+    "y_position_1",
+    "y_position_2",
+    "x_position_start_1",
+    "x_position_start_2",
+    "y_position_start_1",
+    "y_position_start_2",
+
+    "x_position_future5_1",
+    "x_position_future5_2",
+    "y_position_future5_1",
+    "y_position_future5_2",
+    "x_position_past5_1",
+    "x_position_past5_2",
+    "y_position_past5_1",
+    "y_position_past5_2",
+
+    # "orientation_past5_1",
+    # "direction_past5_1",
+    # "orientation_past5_2",
+    # "direction_past5_2",
+]
 
 class ModelSize(Enum):
     SMALL = 1
@@ -52,6 +91,9 @@ class Config:
     SPLIT_FILE_PATH: str = "../input/game_fold.csv"
     MODEL_SIZE: ModelSize = ModelSize.LARGE
     DEBUG: bool = False
+    CAMARO_DF_PATH: Optional[str] = None
+    KMAT_END_DF_PATH: Optional[str] = None
+    KMAT_SIDE_DF_PATH: Optional[str] = None
 
 
 def cast_player_id(df):
@@ -175,7 +217,7 @@ def merge_helmet(df, helmet, meta):
 
         df[f"bbox_iou_{view}"] = bbox_iou(df, view)
 
-    del df["datetime_ngs"]
+    # del df["datetime_ngs"]
     del df["datetime"]
     return reduce_dtype(df)
 
