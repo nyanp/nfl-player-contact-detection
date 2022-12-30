@@ -245,7 +245,10 @@ def inference(cfg: Config):
 def main(args):
     cfg = Config(
         EXP_NAME='exp007_remove_hard_example_large_camaro_kmat_cnn_feats_p2p_interpolate',
-        PRETRAINED_MODEL_PATH='./',
+        PRETRAINED_MODEL_PATH=args.lgbm_path,
+        CAMARO_DF_PATH=args.camaro_path,
+        KMAT_END_DF_PATH=args.kmat_end_path,
+        KMAT_SIDE_DF_PATH=args.kmat_side_path,
         MODEL_SIZE=ModelSize.LARGE,
         DEBUG=args.debug)
 
@@ -270,6 +273,10 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", "-db", action="store_true")
     parser.add_argument("--inference_only", "-i", action="store_true")
+    parser.add_argument("--lgbm_path", "-l", default="", type=str)
+    parser.add_argument("--camaro_path", "-c", default="", type=str)
+    parser.add_argument("--kmat_end_path", "-e", default="", type=str)
+    parser.add_argument("--kmat_side_path", "-s", default="", type=str)
     return parser.parse_args()
 
 

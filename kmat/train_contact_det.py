@@ -167,7 +167,7 @@ class NFLContact():
                                                                                                minimum_stride=self.input_shape[0] // self.output_shape[0],
                                                                                                is_train=self.is_train_model,
                                                                                                backbone="effv2s",
-                                                                                               from_scratch=False)
+                                                                                               from_scratch=True)
         if not weight_file is None:
             self.model.load_weights(weight_file)  # , by_name=True, skip_mismatch=True)
         if not is_train_model:
