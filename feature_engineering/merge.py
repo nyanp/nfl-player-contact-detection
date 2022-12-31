@@ -12,6 +12,8 @@ from utils.nfl import merge_tracking
 
 
 def make_features(df, tracking, regist, df_args=None):
+    if df_args is None:
+        df_args = []
     with timer("merge"):
         tracking = tracking_prep(tracking)
         feature_df = merge_tracking(
@@ -37,7 +39,7 @@ def make_features(df, tracking, regist, df_args=None):
             feature_df,
             window_size=11,
             columns_to_roll=[
-                'exp028_ground',
+                # 'exp028_ground',
                 'cnn_pred_Sideline',
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',

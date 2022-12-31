@@ -39,6 +39,7 @@ NON_FEATURE_COLS = [
     "contacgt_id",
     "game_play",
     "datetime",
+    "datetime_ngs",
     "step",
     "nfl_player_id_1",
     "nfl_player_id_2",
