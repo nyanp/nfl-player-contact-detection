@@ -39,7 +39,7 @@ def make_features(df, tracking, regist, df_args=None):
             feature_df,
             window_size=11,
             columns_to_roll=[
-                # 'exp028_ground',
+                'camaro_pred',
                 'cnn_pred_Sideline',
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
