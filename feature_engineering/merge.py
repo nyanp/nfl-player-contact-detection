@@ -40,8 +40,8 @@ def make_features(df, tracking, regist, df_args=None):
             window_size=11,
             columns_to_roll=[
                 'camaro_pred',
-                # 'cnn_pred_Sideline',
-                # 'cnn_pred_Endzone',
+                'cnn_pred_Sideline',
+                'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'])
 

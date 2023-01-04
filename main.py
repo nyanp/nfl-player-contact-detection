@@ -145,9 +145,10 @@ def train_cv(
                 f"mcc(ground): {mcc_ground:.5f}, mcc(non-ground): {mcc_non_ground:.5f}")
 
             y_pred_all = binarize_pred(oof_pred_all, threshold_1, threshold_2, is_ground_all)
-            original_df.loc[selected_index, "oof"] = oof_pred_all
-            original_df.loc[selected_index, "y_pred"] = y_pred_all
+            original_df["oof"] = oof_pred_all
+            original_df["y_pred"] = y_pred_all
             per_play_mcc_df = summarize_per_play_mcc(original_df)
+            per_play_mcc_df.to_csv('per_play_mcc_df.csv', index=False)
 
             wandb.log(dict(
                 threshold_1=threshold_1,
@@ -156,7 +157,7 @@ def train_cv(
                 mcc_ground=mcc_ground,
                 mcc_non_ground=mcc_non_ground,
                 auc=auc,
-                per_play_mcc=wandb.Table(per_play_mcc_df)
+                per_play_mcc=wandb.Table(dataframe=per_play_mcc_df)
             ))
 
             return ret["cvbooster"], encoder, threshold_1, threshold_2
@@ -242,6 +243,7 @@ def inference(cfg: Config):
     with timer("make features(test)"):
         test_feature_df, test_selected_index = make_features(test_df, te_tracking, te_regist, df_args)
 
+    import pdb; pdb.set_trace()
     X_test = encoder.transform(test_feature_df[feature_cols])
     predicted = cvbooster.predict(X_test)
 
@@ -259,7 +261,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp011_remove_hard_example_large_feats_p2p_interpolate_camaro033_add_nan',
+        EXP_NAME='exp012_remove_hard_example_large_feats_p2p_interpolate_kmat_camaro048_add_nan',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,
