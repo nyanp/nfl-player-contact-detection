@@ -8,9 +8,9 @@ results/
 *.ckpt
 *.dat
 *.h5
+*.f
 wandb/
 output/
-data/
 .vscode/
 
 # Initially taken from Github's Python gitignore file

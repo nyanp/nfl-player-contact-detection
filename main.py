@@ -243,7 +243,6 @@ def inference(cfg: Config):
     with timer("make features(test)"):
         test_feature_df, test_selected_index = make_features(test_df, te_tracking, te_regist, df_args)
 
-    import pdb; pdb.set_trace()
     X_test = encoder.transform(test_feature_df[feature_cols])
     predicted = cvbooster.predict(X_test)
 
