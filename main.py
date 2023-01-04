@@ -14,7 +14,7 @@ from feature_engineering.point_set_matching import match_p2p_with_cache
 from utils.debugger import set_debugger
 from utils.general import (LabelEncoders, LGBMSerializer, make_oof,
                            plot_importance, timer)
-from utils.metrics import binarize_pred, metrics, search_best_threshold_pair
+from utils.metrics import binarize_pred, metrics, search_best_threshold_pair, summarize_per_play_mcc
 from utils.nfl import (
     Config,
     ModelSize,
@@ -112,6 +112,7 @@ def train_cv(
     if calc_oof:
         oof = make_oof(ret["cvbooster"], X_train, y_train, split)
 
+        np.save("X_train.npy", X_train)
         np.save("oof.npy", oof)
 
         if search_threshold:
@@ -143,6 +144,11 @@ def train_cv(
             print(
                 f"mcc(ground): {mcc_ground:.5f}, mcc(non-ground): {mcc_non_ground:.5f}")
 
+            y_pred_all = binarize_pred(oof_pred_all, threshold_1, threshold_2, is_ground_all)
+            original_df.loc[selected_index, "oof"] = oof_pred_all
+            original_df.loc[selected_index, "y_pred"] = y_pred_all
+            per_play_mcc_df = summarize_per_play_mcc(original_df)
+
             wandb.log(dict(
                 threshold_1=threshold_1,
                 threshold_2=threshold_2,
@@ -150,6 +156,7 @@ def train_cv(
                 mcc_ground=mcc_ground,
                 mcc_non_ground=mcc_non_ground,
                 auc=auc,
+                per_play_mcc=wandb.Table(per_play_mcc_df)
             ))
 
             return ret["cvbooster"], encoder, threshold_1, threshold_2
@@ -252,7 +259,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp010_remove_hard_example_large_kmat_cnn_feats_p2p_interpolate_camaro033_add_nan',
+        EXP_NAME='exp011_remove_hard_example_large_feats_p2p_interpolate_camaro033_add_nan',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,

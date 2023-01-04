@@ -1,3 +1,5 @@
+import pandas as pd
+from tqdm.auto import tqdm
 from scipy.optimize import minimize
 from sklearn.metrics import matthews_corrcoef
 
@@ -49,3 +51,23 @@ def metrics(
                 threshold2_mask))
     else:
         return matthews_corrcoef(y_true, y_pred > threshold)
+
+
+def summarize_per_play_mcc(labels):
+    plays = []
+    mccs = []
+    n_contacts = []
+
+    l = labels.set_index("game_play")
+
+    for play in tqdm(labels["game_play"].unique()):
+        p = l.loc[play]
+        mccs.append(matthews_corrcoef(p["contact"], p["y_pred"].fillna(False)))
+        plays.append(play)
+        n_contacts.append(p["contact"].sum())
+
+    return pd.DataFrame({
+        "play": plays,
+        "mcc": mccs,
+        "number_of_contacts": n_contacts
+    })
