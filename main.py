@@ -165,7 +165,7 @@ def train_cv(
     return ret["cvbooster"], encoder, None, None
 
 
-def train(cfg):
+def train(cfg: Config):
     mode = 'disabled' if cfg.DEBUG else None
     wandb.init(
         project=cfg.PROJECT,
@@ -175,10 +175,10 @@ def train(cfg):
         mode=mode)
 
     with timer("load file"):
-        tr_tracking = read_csv_with_cache("train_player_tracking.csv", cfg, usecols=TRACK_COLS)
-        train_df = read_csv_with_cache("train_labels.csv", cfg, usecols=TRAIN_COLS)
+        tr_tracking = read_csv_with_cache("train_player_tracking.csv", cfg.INPUT, cfg.CACHE, usecols=TRACK_COLS)
+        train_df = read_csv_with_cache("train_labels.csv", cfg.INPUT, cfg.CACHE, usecols=TRAIN_COLS)
         split_defs = pd.read_csv(cfg.SPLIT_FILE_PATH)
-        tr_helmets = read_csv_with_cache("train_baseline_helmets.csv", cfg)
+        tr_helmets = read_csv_with_cache("interpolated_train_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
         tr_meta = pd.read_csv(os.path.join(cfg.INPUT, "train_video_metadata.csv"),
                               parse_dates=["start_time", "end_time", "snap_time"])
         tr_regist = match_p2p_with_cache("train_registration.f", tracking=tr_tracking, helmets=tr_helmets, meta=tr_meta)
@@ -216,16 +216,16 @@ def inference(cfg: Config):
 
     with timer("load file"):
         te_tracking = read_csv_with_cache(
-            "test_player_tracking.csv", cfg, usecols=TRACK_COLS)
+            "test_player_tracking.csv", cfg.INPUT, cfg.CACHE, usecols=TRACK_COLS)
 
-        sub = read_csv_with_cache("sample_submission.csv", cfg)
+        sub = read_csv_with_cache("sample_submission.csv", cfg.INPUT, cfg.CACHE)
         test_df = expand_contact_id(sub)
         test_df = pd.merge(test_df,
                            te_tracking[["step", "game_play", "datetime"]].drop_duplicates(),
                            on=["game_play", "step"], how="left")
         test_df = expand_helmet(cfg, test_df, "test")
 
-        te_helmets = read_csv_with_cache("test_baseline_helmets.csv", cfg)
+        te_helmets = read_csv_with_cache("interpolated_test_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
         te_meta = pd.read_csv(os.path.join(cfg.INPUT, "test_video_metadata.csv"),
                               parse_dates=["start_time", "end_time", "snap_time"])
         te_regist = match_p2p_with_cache("test_registration.f", tracking=te_tracking, helmets=te_helmets, meta=te_meta)
@@ -260,7 +260,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp012_remove_hard_example_large_feats_p2p_interpolate_kmat_camaro048_add_nan',
+        EXP_NAME='exp013_remove_hard_example_large_feats_p2p_interpolate_kmat_camaro051_and_helmet',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,

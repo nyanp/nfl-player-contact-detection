@@ -5,7 +5,7 @@ import glob
 
 def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None):
     if camaro_df is None:
-        camaro_df = pd.read_csv('../pipeline/output/exp048_both_ext_blur_dynamic_normalize_coords_fix_frame_noise/val_df.csv')
+        camaro_df = pd.read_csv('../pipeline/output/exp051_both_ext_blur_dynamic_normalize_coords_fix_frame_noise_interpolated/val_df.csv')
 
     camaro_df['camaro_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
     camaro_df.loc[camaro_df['masks'], 'camaro_pred'] = camaro_df.loc[camaro_df['masks'], 'preds']

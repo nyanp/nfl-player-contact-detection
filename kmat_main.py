@@ -2,38 +2,21 @@
 """
 ロード及び前処理まわり。
 """
-import gc
-import glob
-import json
 import os
-import pickle
 import sys
 import time
-from contextlib import contextmanager
-from copy import deepcopy
-from dataclasses import asdict, dataclass
 from threading import Thread
 from turtle import distance
-from typing import List
 
 import cv2
-import lightgbm as lgb
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import tensorflow as tf
 from feature_engineering.table import add_basic_features, tracking_prep
 from kmat.model.model import matthews_correlation_fixed
 from kmat.train_contact_det import NFLContact, view_contact_mask
 from kmat.train_utils.dataloader import inference_preprocess
 from kmat.train_utils.tf_Augmentations_detection import Center_Crop, Compose
-from scipy.optimize import minimize
-from sklearn.metrics import matthews_corrcoef, roc_auc_score
-from sklearn.model_selection import (GroupKFold, PredefinedSplit,
-                                     StratifiedGroupKFold)
-from sklearn.preprocessing import LabelEncoder
-from tensorflow.keras import backend as K
 from utils.nfl import (TRACK_COLS, Config, ModelSize, expand_contact_id, expand_helmet, merge_tracking,
                        read_csv_with_cache)
 
@@ -229,7 +212,6 @@ class Video2Input():
                  frame_interval=1,
                  only_center_frame_of_step=True):
 
-        VIDEO_CODEC = "MP4V"
         self.video_name = os.path.basename(video_path)
         print(f"Preparing {self.video_name}")
         self.labels = labels.copy()  # .query("video == @self.video_name").copy()
@@ -238,8 +220,8 @@ class Video2Input():
         self.start_frame = max(0, min_frame - 5)
         self.vidcap = cv2.VideoCapture(video_path)
         self.fps = self.vidcap.get(cv2.CAP_PROP_FPS)
-        #self.width = int(self.vidcap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        #self.height = int(self.vidcap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        # self.width = int(self.vidcap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        # self.height = int(self.vidcap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.total_frames = int(self.vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.current_frame = self.start_frame
         self.vidcap.set(cv2.CAP_PROP_POS_FRAMES, self.start_frame)
@@ -256,7 +238,7 @@ class Video2Input():
             if True, use only center_frame_of_step and neglect other frames.
         """
         while True:
-            #it_worked, img = self.vidcap.read()
+            # it_worked, img = self.vidcap.read()
             img = self.vidcap.read()
             # if not it_worked:
             if not self.vidcap.running():
@@ -274,7 +256,7 @@ class Video2Input():
                 continue
             step_no = df_frame_helms["step"].iloc[0]
             if only_center_frame_of_step:
-                if df_frame_helms["center_frame_of_step"].iloc[0] == False:
+                if not df_frame_helms["center_frame_of_step"].iloc[0]:
                     continue
             df_frame_label = self.labels[self.labels["step"] == step_no]
             if len(df_frame_label) == 0:
@@ -373,11 +355,12 @@ def build_model(input_shape, output_shape, load_path, num_max_pair=153):
     ]
     transforms = Compose(transforms)
 
-    def preprocessor(x): return inference_preprocess(x,
-                                                     transforms=transforms,
-                                                     max_box_num=23,
-                                                     max_pair_num=num_max_pair,  # enough large
-                                                     padding=True)
+    def preprocessor(x):
+        return inference_preprocess(x,
+                                    transforms=transforms,
+                                    max_box_num=23,
+                                    max_pair_num=num_max_pair,  # enough large
+                                    padding=True)
     return model, preprocessor
 
 
@@ -408,6 +391,7 @@ def get_foldcnntrain_set(train_df, train_01_val_23=False):
     print(f"cnn model predict {num_max_pair} pairs at max")
     model, preprocessor = build_model(input_shape, output_shape, load_path, num_max_pair)
     return model, preprocessor, val_set
+
 
 def load_model(train_df, load_path):
     # load_path = f"{KMAT_PATH}/model/weights/ex000_contdet_run022_{train_title}train_ground_othermask/final_weights.h5"
@@ -611,8 +595,8 @@ def cnn_features_val(train_df, tr_tracking, tr_helmets, tr_video_metadata, cnn_p
     df_side = pd.concat([df_cnn_preds_side_01, df_cnn_preds_side_23], axis=0)
     df_end = pd.concat([df_cnn_preds_end_01, df_cnn_preds_end_23], axis=0)
 
-    #df_side = df_cnn_preds_side_01
-    #df_end = df_cnn_preds_end_01
+    # df_side = df_cnn_preds_side_01
+    # df_end = df_cnn_preds_end_01
 
     df_end['nfl_player_id_2'] = df_end['nfl_player_id_2'].replace(0, ground_id).astype(int)
     df_side['nfl_player_id_2'] = df_side['nfl_player_id_2'].replace(0, ground_id).astype(int)
@@ -634,8 +618,10 @@ def cnn_features_test(train_df, tr_tracking, tr_helmets, tr_video_metadata, ):
 
     game_plays = list(train_df_mini["game_play"].unique())
     # べた書き
-    model_01, preprocessor = load_model(train_df, "../input/mfl2cnnkmat1225/model/weights/ex000_contdet_run022_fold01train_ground_othermask/final_weights.h5")
-    model_23, preprocessor = load_model(train_df, "../input/mfl2cnnkmat1225/model/weights/ex000_contdet_run022_fold23train_ground_othermask/final_weights.h5")
+    model_01, preprocessor = load_model(
+        train_df, "../input/mfl2cnnkmat1225/model/weights/ex000_contdet_run022_fold01train_ground_othermask/final_weights.h5")
+    model_23, preprocessor = load_model(
+        train_df, "../input/mfl2cnnkmat1225/model/weights/ex000_contdet_run022_fold23train_ground_othermask/final_weights.h5")
     # model_01, preprocessor, _ = get_foldcnntrain_set(train_df, train_01_val_23=True)
     # model_23, preprocessor, _ = get_foldcnntrain_set(train_df, train_01_val_23=False)
     model = CNNEnsembler([model_01, model_23], num_output_items=2)
@@ -656,9 +642,9 @@ if __name__ == "__main__":
 
     # 重複した前処理になるが一旦許容する
     te_tracking = read_csv_with_cache(
-        "test_player_tracking.csv", cfg, usecols=TRACK_COLS)
+        "test_player_tracking.csv", cfg.INPUT, cfg.CACHE, usecols=TRACK_COLS)
 
-    sub = read_csv_with_cache("sample_submission.csv", cfg)
+    sub = read_csv_with_cache("sample_submission.csv", cfg.INPUT, cfg.CACHE)
     test_df = expand_contact_id(sub)
     test_df = pd.merge(test_df,
                        te_tracking[["step", "game_play", "datetime"]].drop_duplicates(),
@@ -679,9 +665,7 @@ if __name__ == "__main__":
         ]
     )
     test_df = add_basic_features(test_df)
-
-    # te_helmets = read_csv_with_cache("test_baseline_helmets.csv", cfg)
-    te_helmets = pd.read_csv('../input/nfl-player-contact-detection/test_baseline_helmets.csv')
+    te_helmets = pd.read_csv('../input/interpolated/interpolated_test_helmets.csv')
     te_meta = pd.read_csv(os.path.join(cfg.INPUT, "test_video_metadata.csv"),
                           parse_dates=["start_time", "end_time", "snap_time"])
 

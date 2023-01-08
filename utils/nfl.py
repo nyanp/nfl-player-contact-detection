@@ -75,6 +75,7 @@ NON_FEATURE_COLS = [
     # "direction_past5_2",
 ]
 
+
 class ModelSize(Enum):
     SMALL = 1
     MEDIUM = 2
@@ -86,6 +87,7 @@ class Config:
     PROJECT: str = 'nfl2022-lgbm'
     EXP_NAME: str = 'exp000'
     INPUT: str = "../input/nfl-player-contact-detection"
+    HELMET_DIR: str = "../input/interpolated/"
     CACHE: str = "./data"
     USE_PRETRAINED_MODEL: bool = False
     PRETRAINED_MODEL_PATH: str = "../input/nfl-baseline-oof"
@@ -109,11 +111,11 @@ def cast_player_id(df):
     return df
 
 
-def read_csv_with_cache(filename, cfg: Config, **kwargs):
+def read_csv_with_cache(filename, input_dir, cache_dir, **kwargs):
     cache_filename = filename.split(".")[0] + ".f"
-    cache_path = os.path.join(cfg.CACHE, cache_filename)
+    cache_path = os.path.join(cache_dir, cache_filename)
     if not os.path.exists(cache_path):
-        df = pd.read_csv(os.path.join(cfg.INPUT, filename), **kwargs)
+        df = pd.read_csv(os.path.join(input_dir, filename), **kwargs)
         df = reduce_dtype(cast_player_id(df))
         df.to_feather(cache_path)
     return pd.read_feather(cache_path)
@@ -246,8 +248,8 @@ def expand_helmet(cfg, df, phase="train"):
         "height"
     ]
     helmet = read_csv_with_cache(
-        f"{phase}_baseline_helmets.csv", cfg, usecols=helmet_cols)
-    meta = read_csv_with_cache(f"{phase}_video_metadata.csv", cfg)
+        f"interpolated_{phase}_helmets.csv", cfg.HELMET_DIR, cfg.CACHE, usecols=helmet_cols)
+    meta = read_csv_with_cache(f"{phase}_video_metadata.csv", cfg.INPUT, cfg.CACHE)
     df = merge_helmet(df, helmet, meta)
     return df
 
