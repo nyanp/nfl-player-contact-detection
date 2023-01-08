@@ -488,3 +488,52 @@ def select_close_example(df):
         df["nfl_player_id_2"] == -1).values
     df = df[close_sample_index]
     return df, close_sample_index
+
+
+def add_interceptor_feature(df):
+    # 1-2の間に別のプレイヤー(3)がいるかどうかを計算する。以下のどちらかに該当するケースを抽出。
+    # - 角3-1-2が60度以下で、距離1-2より距離1-3のほうが短い場合
+    # - 角3-2-1が60度以下で、距離2-1より距離2-3のほうが短い場合
+    # 複数が該当する場合は角度が小さいものを優先する
+    dy = df["y_position_2"] - df["y_position_1"]
+    dx = df["x_position_2"] - df["x_position_1"]
+
+    angle_th = 60
+
+    df["angle_dxdy"] = np.rad2deg(np.arctan2(dy, dx))
+
+    angles = df[["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "angle_dxdy", "distance"]].copy()
+    angles = angles[angles["nfl_player_id_2"] != -1]
+
+    def negate_angle(s):
+        s = s + 180
+        s.loc[s > 180] = s.loc[s > 180] - 360
+        return s
+
+    angles_ = angles.copy()
+    angles_.columns = ["game_play", "step", "nfl_player_id_2", "nfl_player_id_1", "angle_dxdy", "distance"]
+    angles_["angle_dxdy"] = negate_angle(angles_["angle_dxdy"])
+
+    angles = pd.concat([angles, angles_[angles.columns]]).reset_index(drop=True)
+
+    angles_triplet = pd.merge(angles, angles, left_on=["game_play", "step", "nfl_player_id_2"], right_on=["game_play", "step", "nfl_player_id_1"], how="left")
+
+    del angles_triplet["nfl_player_id_1_y"]
+    angles_triplet.columns = ["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "angle_2to1", "distance_2to1", "nfl_player_id_3", "angle_2to3", "distance_2to3"]
+    angles_triplet["angle_2to1"] = negate_angle(angles_triplet["angle_2to1"])
+    angles_triplet = angles_triplet[angles_triplet["nfl_player_id_1"] != angles_triplet["nfl_player_id_3"]]
+
+    angles_triplet["angle_123"] = angle_diff(angles_triplet["angle_2to1"], angles_triplet["angle_2to3"])
+
+    interceptors = angles_triplet[(angles_triplet["distance_2to3"] <= angles_triplet["distance_2to1"]) & (angles_triplet["angle_123"] <= angle_th)].sort_values(by="angle_123").drop_duplicates(subset=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"])
+
+    interceptor_player2 = interceptors[["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "distance_2to3", "angle_123", "nfl_player_id_3"]].copy()
+    interceptor_player2.columns = ["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "distance_of_interceptor_2", "angle_interceptor_2", "nfl_player_id_interceptor_2"]
+
+    interceptor_player1 = interceptors[["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "distance_2to3", "angle_123", "nfl_player_id_3"]].copy()
+    interceptor_player1.columns = ["game_play", "step", "nfl_player_id_2", "nfl_player_id_1", "distance_of_interceptor_1", "angle_interceptor_1", "nfl_player_id_interceptor_1"]
+
+    df = pd.merge(df, interceptor_player1, on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"], how="left")
+    df = pd.merge(df, interceptor_player2, on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"], how="left")
+
+    return df

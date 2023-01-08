@@ -260,7 +260,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp013_remove_hard_example_large_feats_p2p_interpolate_kmat_camaro051_and_helmet',
+        EXP_NAME='exp014_exp013+interceptor_feats',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,
