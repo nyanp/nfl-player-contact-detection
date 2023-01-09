@@ -5,13 +5,14 @@ import glob
 
 def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None):
     if camaro_df is None:
-        camaro_df = pd.read_csv('../pipeline/output/exp051_both_ext_blur_dynamic_normalize_coords_fix_frame_noise_interpolated/val_df.csv')
+        camaro_df = pd.read_csv('../pipeline/output/exp048_both_ext_blur_dynamic_normalize_coords_fix_frame_noise/oof_val_preds_agg_df.csv')
 
+    camaro_df['masks'] = camaro_df['masks'].fillna(False)
     camaro_df['camaro_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
     camaro_df.loc[camaro_df['masks'], 'camaro_pred'] = camaro_df.loc[camaro_df['masks'], 'preds']
-    # camaro_df = camaro_df.rename(columns={'preds': 'camaro_pred'})
 
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred']
+    agg_cols = ['preds_max', 'preds_min', 'preds_std', 'preds_mean', 'preds_count']
+    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred'] + agg_cols
     df = df.merge(camaro_df[merge_cols], how='left')
 
     if kmat_end_df is None:

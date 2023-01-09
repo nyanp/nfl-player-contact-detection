@@ -178,7 +178,7 @@ def train(cfg: Config):
         tr_tracking = read_csv_with_cache("train_player_tracking.csv", cfg.INPUT, cfg.CACHE, usecols=TRACK_COLS)
         train_df = read_csv_with_cache("train_labels.csv", cfg.INPUT, cfg.CACHE, usecols=TRAIN_COLS)
         split_defs = pd.read_csv(cfg.SPLIT_FILE_PATH)
-        tr_helmets = read_csv_with_cache("interpolated_train_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
+        tr_helmets = read_csv_with_cache("train_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
         tr_meta = pd.read_csv(os.path.join(cfg.INPUT, "train_video_metadata.csv"),
                               parse_dates=["start_time", "end_time", "snap_time"])
         tr_regist = match_p2p_with_cache("train_registration.f", tracking=tr_tracking, helmets=tr_helmets, meta=tr_meta)
@@ -225,7 +225,7 @@ def inference(cfg: Config):
                            on=["game_play", "step"], how="left")
         test_df = expand_helmet(cfg, test_df, "test")
 
-        te_helmets = read_csv_with_cache("interpolated_test_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
+        te_helmets = read_csv_with_cache("test_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
         te_meta = pd.read_csv(os.path.join(cfg.INPUT, "test_video_metadata.csv"),
                               parse_dates=["start_time", "end_time", "snap_time"])
         te_regist = match_p2p_with_cache("test_registration.f", tracking=te_tracking, helmets=te_helmets, meta=te_meta)
@@ -260,7 +260,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp015_exp014+bbox_std_overlap',
+        EXP_NAME='exp018_exp017+mp_interpolate_debug',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,

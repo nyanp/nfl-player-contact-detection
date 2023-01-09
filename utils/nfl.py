@@ -87,7 +87,7 @@ class Config:
     PROJECT: str = 'nfl2022-lgbm'
     EXP_NAME: str = 'exp000'
     INPUT: str = "../input/nfl-player-contact-detection"
-    HELMET_DIR: str = "../input/interpolated/"
+    HELMET_DIR: str = "../input/nfl-player-contact-detection"
     CACHE: str = "./data"
     USE_PRETRAINED_MODEL: bool = False
     PRETRAINED_MODEL_PATH: str = "../input/nfl-baseline-oof"
