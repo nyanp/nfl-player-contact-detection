@@ -516,24 +516,70 @@ def add_interceptor_feature(df):
 
     angles = pd.concat([angles, angles_[angles.columns]]).reset_index(drop=True)
 
-    angles_triplet = pd.merge(angles, angles, left_on=["game_play", "step", "nfl_player_id_2"], right_on=["game_play", "step", "nfl_player_id_1"], how="left")
+    angles_triplet = pd.merge(
+        angles, angles, left_on=[
+            "game_play", "step", "nfl_player_id_2"], right_on=[
+            "game_play", "step", "nfl_player_id_1"], how="left")
 
     del angles_triplet["nfl_player_id_1_y"]
-    angles_triplet.columns = ["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "angle_2to1", "distance_2to1", "nfl_player_id_3", "angle_2to3", "distance_2to3"]
+    angles_triplet.columns = [
+        "game_play",
+        "step",
+        "nfl_player_id_1",
+        "nfl_player_id_2",
+        "angle_2to1",
+        "distance_2to1",
+        "nfl_player_id_3",
+        "angle_2to3",
+        "distance_2to3"]
     angles_triplet["angle_2to1"] = negate_angle(angles_triplet["angle_2to1"])
     angles_triplet = angles_triplet[angles_triplet["nfl_player_id_1"] != angles_triplet["nfl_player_id_3"]]
 
     angles_triplet["angle_123"] = angle_diff(angles_triplet["angle_2to1"], angles_triplet["angle_2to3"])
 
-    interceptors = angles_triplet[(angles_triplet["distance_2to3"] <= angles_triplet["distance_2to1"]) & (angles_triplet["angle_123"] <= angle_th)].sort_values(by="angle_123").drop_duplicates(subset=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"])
+    interceptors = angles_triplet[(angles_triplet["distance_2to3"] <= angles_triplet["distance_2to1"]) & (angles_triplet["angle_123"] <= angle_th)].sort_values(
+        by="angle_123").drop_duplicates(subset=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"])
 
-    interceptor_player2 = interceptors[["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "distance_2to3", "angle_123", "nfl_player_id_3"]].copy()
-    interceptor_player2.columns = ["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "distance_of_interceptor_2", "angle_interceptor_2", "nfl_player_id_interceptor_2"]
+    interceptor_player2 = interceptors[["game_play", "step", "nfl_player_id_1",
+                                        "nfl_player_id_2", "distance_2to3", "angle_123", "nfl_player_id_3"]].copy()
+    interceptor_player2.columns = [
+        "game_play",
+        "step",
+        "nfl_player_id_1",
+        "nfl_player_id_2",
+        "distance_of_interceptor_2",
+        "angle_interceptor_2",
+        "nfl_player_id_interceptor_2"]
 
-    interceptor_player1 = interceptors[["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "distance_2to3", "angle_123", "nfl_player_id_3"]].copy()
-    interceptor_player1.columns = ["game_play", "step", "nfl_player_id_2", "nfl_player_id_1", "distance_of_interceptor_1", "angle_interceptor_1", "nfl_player_id_interceptor_1"]
+    interceptor_player1 = interceptors[["game_play", "step", "nfl_player_id_1",
+                                        "nfl_player_id_2", "distance_2to3", "angle_123", "nfl_player_id_3"]].copy()
+    interceptor_player1.columns = [
+        "game_play",
+        "step",
+        "nfl_player_id_2",
+        "nfl_player_id_1",
+        "distance_of_interceptor_1",
+        "angle_interceptor_1",
+        "nfl_player_id_interceptor_1"]
 
     df = pd.merge(df, interceptor_player1, on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"], how="left")
     df = pd.merge(df, interceptor_player2, on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"], how="left")
+
+    return df
+
+
+def add_bbox_std_overlap_feature(df):
+    for view in ["Sideline", "Endzone"]:
+        xc1 = df[f"bbox_center_x_{view}_1"]
+        yc1 = df[f"bbox_center_y_{view}_1"]
+        xc2 = df[f"bbox_center_x_{view}_2"]
+        yc2 = df[f"bbox_center_y_{view}_2"]
+        w1 = df[f"width_{view}_1"]
+        h1 = df[f"height_{view}_1"]
+        w2 = df[f"width_{view}_2"]
+        h2 = df[f"height_{view}_2"]
+
+        df[f"bbox_x_std_overlap_{view}"] = (np.minimum(xc1 + w1 / 2, xc2 + w2 / 2) - np.maximum(xc1 - w1 / 2, xc2 - w2 / 2)) / (w1 + w2)
+        df[f"bbox_y_std_overlap_{view}"] = (np.minimum(yc1 + h1 / 2, yc2 + h2 / 2) - np.maximum(yc1 - h1 / 2, yc2 - h2 / 2)) / (h1 + h2)
 
     return df
