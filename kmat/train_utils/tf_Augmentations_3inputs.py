@@ -26,49 +26,23 @@ class Compose():
             transform.reset_params()
             
             if transform.__class__.__name__=="Crop_by_box_shape" or transform.__class__.__name__=="Center_Crop_by_box_shape":
-                inputs["rectangles"] = transform([inputs["rgb"], inputs["rectangles"]], "quadrangles")
-                inputs["rgb"] = transform(inputs["rgb"], "rgb")
-                #if LOAD_FLOW:
-                #    inputs["flow_12"] = transform(inputs["flow_12"], "flow")
-                #    inputs["flow_21"] = transform(inputs["flow_21"], "flow")
+                inputs["rectangles"] = transform([inputs["rgb_c"], inputs["rectangles"]], "quadrangles")
+                inputs["rgb_p"] = transform(inputs["rgb_p"], "rgb")
+                inputs["rgb_c"] = transform(inputs["rgb_c"], "rgb")
+                inputs["rgb_n"] = transform(inputs["rgb_n"], "rgb")
+                if LOAD_FLOW:
+                    inputs["flow_12"] = transform(inputs["flow_12"], "flow")
+                    inputs["flow_21"] = transform(inputs["flow_21"], "flow")
             else:
-                inputs["rgb"] = transform(inputs["rgb"], "rgb")
+                inputs["rgb_pp"] = transform(inputs["rgb_pp"], "rgb")
+                inputs["rgb_p"] = transform(inputs["rgb_p"], "rgb")
+                inputs["rgb_c"] = transform(inputs["rgb_c"], "rgb")
+                inputs["rgb_n"] = transform(inputs["rgb_n"], "rgb")
+                inputs["rgb_nn"] = transform(inputs["rgb_nn"], "rgb")
                 inputs["rectangles"] = transform(inputs["rectangles"], "quadrangles")
-                inputs["player_positions"] = transform(inputs["player_positions"], "player_pos")
-                
-                
-                #if LOAD_FLOW:
-                #    inputs["flow_12"] = transform(inputs["flow_12"], "flow")
-                #    inputs["flow_21"] = transform(inputs["flow_21"], "flow")
-            
-        inputs["rectangles"] = tf.reshape(inputs["rectangles"], [-1,4,2])
-            
-        return inputs
-
-class ComposeNopos():
-    """
-    for inference of map model
-    """
-    def __init__(self, transforms):
-        self.transforms = transforms
-           
-    def __call__(self, inputs):#, targets):
-        inputs["rectangles"] = tf.reshape(inputs["rectangles"], [-1,2])
-
-        for i, transform in enumerate(self.transforms):
-            
-            if tf.random.uniform(()) > transform.p:
-                continue
-            transform.reset_params()
-            
-            if transform.__class__.__name__=="Crop_by_box_shape" or transform.__class__.__name__=="Center_Crop_by_box_shape":
-                inputs["rectangles"] = transform([inputs["rgb"], inputs["rectangles"]], "quadrangles")
-                inputs["rgb"] = transform(inputs["rgb"], "rgb")
-                
-            else:
-                inputs["rgb"] = transform(inputs["rgb"], "rgb")
-                inputs["rectangles"] = transform(inputs["rectangles"], "quadrangles")
-                
+                if LOAD_FLOW:
+                    inputs["flow_12"] = transform(inputs["flow_12"], "flow")
+                    inputs["flow_21"] = transform(inputs["flow_21"], "flow")
             
         inputs["rectangles"] = tf.reshape(inputs["rectangles"], [-1,4,2])
             
@@ -135,8 +109,6 @@ class VerticalFlip():
     def __call__(self, inputs, key):
         if key in ["quadrangles"]:
             inputs = self.apply_to_point(inputs)
-        elif key in ["player_pos"]:
-            inputs = self.apply_to_player_pos(inputs)
         elif key in ["flow"]:
             inputs = self.apply_to_flow(inputs)
         else:
@@ -162,9 +134,6 @@ class VerticalFlip():
     def apply_to_point(self, inputs):#shape: [point_num, 2(x,y)]
         return tf.cast(tf.stack([[0,self.height-1]]), tf.float32) + (inputs * tf.constant([[1,-1]], tf.float32))
 
-    def apply_to_player_pos(self, inputs):#shape: [point_num, 2(x,y)]
-        return inputs * tf.constant([[1,-1]], tf.float32)
-
 
 class HorizontalFlip():
     def __init__(self, p=0.5):
@@ -173,8 +142,6 @@ class HorizontalFlip():
     def __call__(self, inputs, key):
         if key in ["quadrangles"]:
             inputs = self.apply_to_point(inputs)
-        elif key in ["player_pos"]:
-            inputs = self.apply_to_player_pos(inputs)
         elif key in ["flow"]:
             inputs = self.apply_to_flow(inputs)
         else:
@@ -200,9 +167,7 @@ class HorizontalFlip():
     
     def apply_to_point(self, inputs):#shape: [point_num, 2(x,y)]
         return tf.cast(tf.stack([[self.width-1,0]]), tf.float32) + (inputs * tf.constant([[-1,1]], tf.float32))
-
-    def apply_to_player_pos(self, inputs):#shape: [point_num, 2(x,y)]
-        return inputs * tf.constant([[-1,1]], tf.float32)    
+    
 
 class Resize():
     """
@@ -225,8 +190,6 @@ class Resize():
         elif key in ["flow"]:
             if self.height is not None:
                 inputs = self.apply_to_flow(inputs, self.height, self.width, "bilinear")
-        elif key in ["player_pos"]:
-            pass
         else:
             if self.target_height is not None:
                 inputs = self.apply(inputs, self.target_height, self.target_width, "nearest")
@@ -269,8 +232,6 @@ class Crop():
     def __call__(self, data, key):
         if key in ["quadrangles"]:
             data = self.apply_to_point(data)
-        elif key in ["player_pos"]:
-            pass
         else:
             data = self.apply(data)
         return data
@@ -313,9 +274,7 @@ class Crop_by_box_shape():
         
     def __call__(self, data, key):
         if key in ["quadrangles"]:
-            data = self.apply_to_point(data)   
-        elif key in ["player_pos"]:
-            pass
+            data = self.apply_to_point(data)           
         else:
             data = self.apply(data)
         return data
@@ -941,7 +900,7 @@ class Rotation():
     def __call__(self, inputs, key):
         if key in ["rgb"]:
             inputs = self.apply(inputs)
-        elif key in ["quadrangles", "player_pos"]:#未確認            
+        elif key in ["quadrangles"]:
             inputs = self.apply_to_point(inputs)
         return inputs
 

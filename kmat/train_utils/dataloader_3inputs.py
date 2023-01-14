@@ -8,6 +8,7 @@ import glob
 import json
 
 import tensorflow as tf
+import tensorflow_addons as tfa
 import numpy as np
 import pandas as pd
 
@@ -18,56 +19,6 @@ LOAD_FLOW = False
 ####
 #### --- COL MODEL ---
 ####
-
-def _load_dataset(files, frame_interval=1, rate=0.8, 
-                 load_all=False, 
-                 #player_dataset=False, 
-                 detection_dataset=False, 
-                 #player_classifier_dataset=False, 
-                 #load_motion=False, load_depth=False, 
-                 use_pseudo_data=False, 
-                 #load_jersey_instead_team=False, 
-                 skip_few_box=True):
-    train_dataset = []
-    val_dataset = []
-    #player_labels = {"id_counter": 0}
-    for i, file in enumerate(files):
-        if i<rate*len(files):
-            #if player_dataset:#ひっつけない。ここのプレイで分けておく。
-            #    data_single_play, player_labels = load_data_player(path=file, frame_interval=frame_interval, load_all=load_all, player_labels=player_labels)
-            #    train_dataset += [data_single_play]
-            if detection_dataset:
-                train_dataset += load_data_detector(path=file, frame_interval=frame_interval)
-            #elif player_classifier_dataset:
-            #    data_single_play, player_labels = load_data_player(path=file, frame_interval=frame_interval, load_all=load_all, player_labels=player_labels)
-            #    train_dataset += data_single_play
-            else:
-                train_dataset += load_data(path=file, frame_interval=frame_interval, load_all=load_all, 
-                                           #load_motion=load_motion, load_depth=load_depth, 
-                                           use_pseudo_data=use_pseudo_data, 
-                                           #load_jersey_instead_team=load_jersey_instead_team, 
-                                           skip_few_box=skip_few_box)
-        else:
-            #if player_dataset:
-            #    data_single_play, player_labels = load_data_player(path=file, frame_interval=frame_interval, load_all=load_all, player_labels=player_labels)
-            #    val_dataset += [data_single_play]
-            #    #val_dataset += [load_data_player(path=file, frame_interval=frame_interval, load_all=load_all)]
-            if detection_dataset:
-                val_dataset += load_data_detector(path=file, frame_interval=frame_interval)
-            #elif player_classifier_dataset:
-            #    data_single_play, player_labels = load_data_player(path=file, frame_interval=frame_interval, load_all=load_all, player_labels=player_labels)
-            #    val_dataset += data_single_play
-            else:
-                val_dataset += load_data(path=file, frame_interval=frame_interval, load_all=load_all, 
-                                         #load_motion=load_motion, load_depth=load_depth, 
-                                         use_pseudo_data=use_pseudo_data, 
-                                         #load_jersey_instead_team=load_jersey_instead_team, 
-                                         skip_few_box=skip_few_box)
-    #if player_classifier_dataset:
-    #    print("num_player is", player_labels["id_counter"]+1)
-    #    return train_dataset, val_dataset, player_labels
-    return train_dataset, val_dataset
-
 
 def chain_list(inputs):
     outputs = []
@@ -99,28 +50,29 @@ def load_dataset(path_list,
         elif gcn_model:
             data = load_data_gcn(path)
         else:
-            data = load_data(path,
+            data = load_data_5frames(path,
                           num_max=num_max, 
                           frame_interval=frame_interval, 
-                          load_flow=LOAD_FLOW)
+                          )
         dataset += data
     return dataset
 
-def load_data(path,
+def load_data_3frames(path,
               num_max=-1, 
               frame_interval=1, 
-              load_flow=True):
+              ):
     rgb_files = sorted(glob.glob(os.path.join(path, "*.jpg")))[::frame_interval]
-    annotation_files = sorted(glob.glob(os.path.join(path, "*_label.json")))[::frame_interval]
-    pos_files = [rgb_f.replace(".jpg", "_pos.npy") for rgb_f in rgb_files]
-    flow_files_12 = [rgb_f.replace("train_img", "train_flow_img_512x896").replace(".jpg", "flow12.npy") for rgb_f in rgb_files]
-    flow_files_21 = [rgb_f.replace("train_img", "train_flow_img_512x896").replace(".jpg", "flow21.npy") for rgb_f in rgb_files]
+    rgb_files_prev = rgb_files[:-2]
+    rgb_files_current = rgb_files[1:-1]
+    rgb_files_next = rgb_files[2:]
     
+    annotation_files = sorted(glob.glob(os.path.join(path, "*_label.json")))[1:-1]
+    flow_files_12 = [rgb_f.replace("train_img", "train_flow_img_512x896").replace(".jpg", "flow12.npy") for rgb_f in rgb_files_current]
+    flow_files_21 = [rgb_f.replace("train_img", "train_flow_img_512x896").replace(".jpg", "flow21.npy") for rgb_f in rgb_files_current]
     
-    
-    num_files = len(rgb_files)
+    num_files = len(rgb_files_current)
     dataset = []
-    for i, [rgb_file, ann_file, pos_file, flow_12, flow_21] in enumerate(zip(rgb_files, annotation_files, pos_files, flow_files_12, flow_files_21)):
+    for i, [rgb_file_p, rgb_file_c, rgb_file_n, ann_file, flow_12, flow_21] in enumerate(zip(rgb_files_prev, rgb_files_current, rgb_files_next, annotation_files, flow_files_12, flow_files_21)):
             
         if i%(num_files//4)==0:
             print("\r----- loading dataset {}/{} -----".format(i+1, num_files), end="")
@@ -129,19 +81,20 @@ def load_data(path,
         rectangles = np.array(ann["rectangles"], np.float32)
         num_player = int(ann["num_player"])
         num_labels = np.array(ann["num_contact_labels"], np.int32).sum()
-        if num_labels == 0 :
-            continue
         player_id = np.array(ann["player_id_1"], np.int32)
         player_id_1 = np.array(chain_list([[pid] * num for pid, num in zip(ann["player_id_1"], ann["num_contact_labels"])]), np.int32)
         player_id_2 = np.array(chain_list(ann["player_id_2"]), np.int32)
         contact_labels = np.array(chain_list(ann["contact_labels"]), np.int32)
         contact_pairlabels = np.vstack([player_id_1, player_id_2, contact_labels]).T
         #contact_labels = np.array(ann["contact_labels"])#, np.int32)
-        player_positions = np.load(pos_file)
+        
+        if num_labels == 0 :
+            continue
 
-        data = {"file": rgb_file,
+        data = {"file_p": rgb_file_p,
+                "file_c": rgb_file_c,
+                "file_n": rgb_file_n,
                 "rectangles": rectangles, 
-                "player_positions": player_positions,
                 "player_id": player_id, 
                 "contact_pairlabels": contact_pairlabels,
                 "num_labels": num_labels,
@@ -149,19 +102,69 @@ def load_data(path,
                 "img_height": 720,
                 "img_width": 1280,
                 }
-        if load_flow:
-            # if use_flow, the start and end don't have flow.
-            if i==0:
-                continue
-            if i==(num_files-1):
-                continue
-            data["flow_12"] = flow_12
-            data["flow_21"] = flow_21
-            #data["flow_width"] = 544//8
-            #data["flow_height"] = 360//8
-            data["flow_width"] = 896//8
-            data["flow_height"] = 512//8
+        
+        data["flow_12"] = flow_12
+        data["flow_21"] = flow_21
+        data["flow_width"] = 896//8
+        data["flow_height"] = 512//8
+
+        dataset.append(data)
+    return dataset
+
+def load_data_5frames(path,
+              num_max=-1, 
+              frame_interval=1, 
+              ):
+    rgb_files = sorted(glob.glob(os.path.join(path, "*.jpg")))[::frame_interval]
+    rgb_files_pprev = rgb_files[4:]
+    rgb_files_prev = rgb_files[3:-1]
+    rgb_files_current = rgb_files[2:-2]
+    rgb_files_next = rgb_files[1:-3]
+    rgb_files_nnext = rgb_files[:-4]
+
+    annotation_files = sorted(glob.glob(os.path.join(path, "*_label.json")))[1:-1]
+    flow_files_12 = [rgb_f.replace("train_img", "train_flow_img_512x896").replace(".jpg", "flow12.npy") for rgb_f in rgb_files_current]
+    flow_files_21 = [rgb_f.replace("train_img", "train_flow_img_512x896").replace(".jpg", "flow21.npy") for rgb_f in rgb_files_current]
+    
+    num_files = len(rgb_files_current)
+    dataset = []
+    for i, [rgb_file_pp, rgb_file_p, rgb_file_c, rgb_file_n,  rgb_file_nn, ann_file, flow_12, flow_21] in enumerate(zip(rgb_files_pprev, rgb_files_prev, rgb_files_current, rgb_files_next, rgb_files_nnext, annotation_files, flow_files_12, flow_files_21)):
             
+        if i%(num_files//4)==0:
+            print("\r----- loading dataset {}/{} -----".format(i+1, num_files), end="")
+
+        ann = json.load(open(ann_file, 'r')) 
+        rectangles = np.array(ann["rectangles"], np.float32)
+        num_player = int(ann["num_player"])
+        num_labels = np.array(ann["num_contact_labels"], np.int32).sum()
+        player_id = np.array(ann["player_id_1"], np.int32)
+        player_id_1 = np.array(chain_list([[pid] * num for pid, num in zip(ann["player_id_1"], ann["num_contact_labels"])]), np.int32)
+        player_id_2 = np.array(chain_list(ann["player_id_2"]), np.int32)
+        contact_labels = np.array(chain_list(ann["contact_labels"]), np.int32)
+        contact_pairlabels = np.vstack([player_id_1, player_id_2, contact_labels]).T
+        #contact_labels = np.array(ann["contact_labels"])#, np.int32)
+        
+        if num_labels == 0 :
+            continue
+
+        data = {"file_pp": rgb_file_pp,
+                "file_p": rgb_file_p,
+                "file_c": rgb_file_c,
+                "file_n": rgb_file_n,
+                "file_nn": rgb_file_nn,
+                "rectangles": rectangles, 
+                "player_id": player_id, 
+                "contact_pairlabels": contact_pairlabels,
+                "num_labels": num_labels,
+                "num_player":num_player, 
+                "img_height": 720,
+                "img_width": 1280,
+                }
+        
+        data["flow_12"] = flow_12
+        data["flow_21"] = flow_21
+        data["flow_width"] = 896//8
+        data["flow_height"] = 512//8
 
         dataset.append(data)
     return dataset
@@ -172,7 +175,11 @@ def decode_image(dataset):
         img = tf.io.read_file(img_file)
         img = tf.image.decode_jpeg(img, channels=3)
         return img
-    dataset["rgb"] = read_jpg(dataset["file"])
+    dataset["rgb_pp"] = read_jpg(dataset["file_pp"])
+    dataset["rgb_p"] = read_jpg(dataset["file_p"])
+    dataset["rgb_c"] = read_jpg(dataset["file_c"])
+    dataset["rgb_n"] = read_jpg(dataset["file_n"])
+    dataset["rgb_nn"] = read_jpg(dataset["file_nn"])
     return dataset
 
 def decode_flow_npy(file, height, width, num_ch=2):
@@ -207,7 +214,11 @@ def cast_and_reshape_dataset(dataset):
     width = dataset["img_width"]
     #num_box = dataset["rectangle_num"]# +dataset["current_rectangle_num"] + dataset["next_rectangle_num"]
     #for key in ["previous_rgb","current_rgb","next_rgb"]:
-    dataset["rgb"] = tf.reshape(tf.cast(dataset["rgb"], tf.float32),[height, width, 3])
+    dataset["rgb_pp"] = tf.reshape(tf.cast(dataset["rgb_pp"], tf.float32),[height, width, 3])
+    dataset["rgb_p"] = tf.reshape(tf.cast(dataset["rgb_p"], tf.float32),[height, width, 3])
+    dataset["rgb_c"] = tf.reshape(tf.cast(dataset["rgb_c"], tf.float32),[height, width, 3])
+    dataset["rgb_n"] = tf.reshape(tf.cast(dataset["rgb_n"], tf.float32),[height, width, 3])
+    dataset["rgb_nn"] = tf.reshape(tf.cast(dataset["rgb_nn"], tf.float32),[height, width, 3])
     #dataset["rectangles"] = tf.reshape(tf.cast(dataset["rectangles"], tf.float32),[num_box, 4, 2])
     #dataset["locations"] = tf.reshape(tf.cast(dataset["locations"], tf.float32),[num_box, 1, 2]) 
     #dataset["team_labels"] = tf.reshape(tf.cast(dataset["team_labels"], tf.int32),[num_box, 1]) 
@@ -217,9 +228,6 @@ def cast_and_reshape_dataset(dataset):
     dataset["contact_pairlabels"] = tf.reshape(tf.cast(dataset["contact_pairlabels"], tf.int32),[dataset["num_labels"], 3])
     dataset["player_id"] = tf.reshape(tf.cast(dataset["player_id"], tf.int32),[dataset["num_player"],])
     dataset["rectangles"] = tf.reshape(tf.cast(dataset["rectangles"], tf.float32),[dataset["num_player"], 4, 2])
-    dataset["player_positions"] = tf.reshape(tf.cast(dataset["player_positions"], tf.float32),[dataset["num_player"], 2])
-    
-    
     #dataset["player_id_2"] = split_to_list(dataset["player_id_2"], dataset["num_contact_labels"])
     
     if LOAD_FLOW:
@@ -245,9 +253,12 @@ def build_tf_dataset(original_dataset):
             for data in dataset:
                 yield data
         return generator
-    dataset = tf.data.Dataset.from_generator(gen_wrapper(original_dataset), output_types={"file": tf.string,
+    dataset = tf.data.Dataset.from_generator(gen_wrapper(original_dataset), output_types={"file_pp": tf.string,
+                                                                                          "file_p": tf.string,
+                                                                                          "file_c": tf.string,
+                                                                                          "file_n": tf.string,
+                                                                                          "file_nn": tf.string,
                                                                                           "rectangles": tf.float32, 
-                                                                                          "player_positions": tf.float32, 
                                                                                           "player_id": tf.int32,
                                                                                           #"player_id_2": tf.int32,
                                                                                           "contact_pairlabels": tf.int32,
@@ -255,10 +266,10 @@ def build_tf_dataset(original_dataset):
                                                                                           "num_player": tf.int32, 
                                                                                           "img_height": tf.int32,
                                                                                           "img_width": tf.int32,
-                                                                                          #"flow_12": tf.string,
-                                                                                          #"flow_21": tf.string,
-                                                                                          #"flow_width": tf.int32,
-                                                                                          #"flow_height": tf.int32,
+                                                                                          "flow_12": tf.string,
+                                                                                          "flow_21": tf.string,
+                                                                                          "flow_width": tf.int32,
+                                                                                          "flow_height": tf.int32,
                                                                                           })
     
     dataset = dataset.map(decode_image, num_parallel_calls=AUTO)
@@ -279,9 +290,135 @@ def resize_flow_to_rgb(data):
         data["flow_21"] = data["stacked_flow"][1]
     return data
 
+
+def warp_bilinear_lessint(features, warp_coords, only_mask=False):
+    """
+    int使用すると妙に遅い。最小限にとどめると少し早くなる。なぜ・・？
+    gather_ndも遅い。
+    tfaのresamplerもなぜか遅い。最新バージョンだと気にしない速さの様子＠kaggle notebook
+    """
+    batch, height, width, num_ch = tf.unstack(tf.shape(features))
+    batch, height_w, width_w, _ = tf.unstack(tf.shape(warp_coords))
+    height_f32 = tf.cast(height, tf.float32)
+    width_f32 = tf.cast(width, tf.float32)
+    
+    x_idx = warp_coords[...,:1]
+    y_idx = warp_coords[...,1:2]
+    """
+    inside_frame_x = tf.math.logical_and(x_idx >= 0., x_idx <= tf.cast(width-1, tf.float32))
+    inside_frame_y = tf.math.logical_and(y_idx >= 0., y_idx <= tf.cast(height-1, tf.float32))
+    inside_frame = tf.math.logical_and(inside_frame_x, inside_frame_y)
+    if only_mask:
+        return inside_frame
+    """
+    x_idx = tf.clip_by_value(x_idx, 0., tf.cast(width-1, tf.float32))
+    y_idx = tf.clip_by_value(y_idx, 0., tf.cast(height-1, tf.float32))
+
+    left_idx = tf.floor(x_idx)
+    right_idx = tf.math.ceil(x_idx)
+    top_idx = tf.floor(y_idx)
+    bottom_idx = tf.math.ceil(y_idx)
+
+    #left_idx = tf.clip_by_value(left_idx, 0., tf.cast(width-1, tf.float32))
+    #right_idx = tf.clip_by_value(right_idx, 0., tf.cast(width-1, tf.float32))
+    #top_idx = tf.clip_by_value(top_idx, 0., tf.cast(height-1, tf.float32))
+    #bottom_idx = tf.clip_by_value(bottom_idx, 0., tf.cast(height-1, tf.float32))
+    
+    left_weight = right_idx - x_idx
+    right_weight = 1.0 - left_weight
+    top_weight = bottom_idx - y_idx
+    bottom_weight = 1.0 - top_weight
+    
+    tl_weight = top_weight * left_weight
+    tr_weight = top_weight * right_weight
+    bl_weight = bottom_weight * left_weight
+    br_weight = bottom_weight * right_weight
+    
+    tl_idx = top_idx * width_f32 + left_idx
+    tr_idx = top_idx * width_f32 + right_idx
+    bl_idx = bottom_idx * width_f32 + left_idx
+    br_idx = bottom_idx * width_f32 + right_idx
+    
+    features = tf.reshape(features, [batch, height*width, num_ch])
+    tl_idx = tf.reshape(tl_idx, [batch, height_w*width_w])
+    tr_idx = tf.reshape(tr_idx, [batch, height_w*width_w])
+    bl_idx = tf.reshape(bl_idx, [batch, height_w*width_w])
+    br_idx = tf.reshape(br_idx, [batch, height_w*width_w])
+    
+    tl_weight = tf.reshape(tl_weight, [batch, height_w*width_w, 1])
+    tr_weight = tf.reshape(tr_weight, [batch, height_w*width_w, 1])
+    bl_weight = tf.reshape(bl_weight, [batch, height_w*width_w, 1])
+    br_weight = tf.reshape(br_weight, [batch, height_w*width_w, 1])
+    
+    warp_indices = tf.cast(tf.concat([tl_idx, tr_idx, bl_idx, br_idx], axis=-1), tf.int32)
+    
+    tl_feature, tr_feature, bl_feature, br_feature = tf.split(tf.gather(features, warp_indices, batch_dims=1), 4, axis=1)
+
+    warped = tl_weight * tl_feature + tr_weight * tr_feature + bl_weight * bl_feature + br_weight * br_feature
+    warped = tf.reshape(warped, [batch, height_w, width_w, num_ch])
+    return warped#, inside_frame
+
+def coords_grid(height, width):    
+    gy, gx = tf.meshgrid(tf.range(height, dtype=tf.float32),
+                         tf.range(width, dtype=tf.float32),
+                         indexing='ij')
+    coords = tf.stack([gx, gy], axis=-1)
+    return coords#[h,w,2]
+
+def warp_bilinear_tfa(features, warp_coords):
+    batch, height, width, _ = tf.unstack(tf.shape(features))
+    x_idx = warp_coords[...,:1]
+    y_idx = warp_coords[...,1:2]
+    #inside_frame_x = tf.math.logical_and(x_idx >= 0., x_idx <= tf.cast(width-1, tf.float32))
+    #inside_frame_y = tf.math.logical_and(y_idx >= 0., y_idx <= tf.cast(height-1, tf.float32))
+    #inside_frame = tf.math.logical_and(inside_frame_x, inside_frame_y)
+    x_idx = tf.clip_by_value(x_idx, 0., tf.cast(width-1, tf.float32))
+    y_idx = tf.clip_by_value(y_idx, 0., tf.cast(height-1, tf.float32))
+    warp_coords = tf.concat([x_idx, y_idx], axis=-1)
+    warped = tfa.image.resampler(features, warp_coords)#easiest way is use tfa library
+    return warped#, inside_frame
+
+def rgbreconst_by_flow(data, default_grid, input_shape):
+    #origin_size = tf.cast(tf.stack([data["flow_width"], data["flow_height"]]), tf.float32)
+    #target_size = tf.cast(tf.stack([data["img_width"], data["img_height"]]), tf.float32)
+    #rate = target_size / origin_size
+    #resized_flow = tf.image.resize(tf.stack([data["flow_21"],data["flow_12"]]), 
+    #                              (data["img_height"], data["img_width"]), method="bilinear")
+    #resized_flow = resized_flow * rate[tf.newaxis, tf.newaxis, tf.newaxis, :] #multiply flow scale
+    warp_coord = default_grid + tf.stack([data["flow_21"],data["flow_12"]])
+    reconst_rgb = warp_bilinear_tfa(tf.stack([data["rgb_p"],data["rgb_n"]]), warp_coord)#add batch dim
+    #data["rgb_reconst_from_p"] = tf.reshape(reconst_rgb[0], [data["img_height"], data["img_width"], 3])# - data["rgb"]
+    #data["rgb_reconst_from_n"] = tf.reshape(reconst_rgb[1], [data["img_height"], data["img_width"], 3])# - data["rgb"]
+    data["rgb_reconst_from_p"] = tf.reshape(reconst_rgb[0], [input_shape[0], input_shape[1], 3])# - data["rgb"]
+    data["rgb_reconst_from_n"] = tf.reshape(reconst_rgb[1], [input_shape[0], input_shape[1], 3])# - data["rgb"]
+    
+    #data["rgb_reconst_prev"] = data["rgb_prev"]
+    #data["rgb_reconst_next"] = data["rgb_next"]
+    return data
+
+def rgbrediff_by_flow(data):
+    for suffix in ["p", "n"]:
+        data[f"rgb_diff_{suffix}"] = data[f"rgb_reconst_{suffix}"] - data["rgb_c"]
+    return data
+
 def normalize_inputs_outputs(data):
-    h, w = tf.unstack(tf.shape(data["rgb"]))[:2]
-    data["rgb"] = data["rgb"]/255
+    h, w = tf.unstack(tf.shape(data["rgb_c"]))[:2]
+    #data["rgb_p"] = (data["rgb_c"] - data["rgb_reconst_from_p"])/255
+    #data["rgb_n"] = (data["rgb_reconst_from_n"] - data["rgb_c"])/255
+    #data["rgb_c"] = data["rgb_c"]/255
+    
+    
+    #data["rgb_p"] = data["rgb_reconst_from_p"]/255
+    #data["rgb_n"] = data["rgb_reconst_from_n"]/255
+    #data["rgb_c"] = data["rgb_c"]/255
+    
+    data["rgb_nn"] = data["rgb_nn"]/255
+    data["rgb_n"] = data["rgb_n"]/255
+    data["rgb_c"] = data["rgb_c"]/255
+    data["rgb_p"] = data["rgb_p"]/255
+    data["rgb_pp"] = data["rgb_pp"]/255
+    
+    """
     if LOAD_FLOW:
         base_helmet_size = tf.reduce_mean(tf.math.sqrt(tf.reduce_sum((data["rectangles"][:,0,:] - data["rectangles"][:,2,:])**2, axis=-1)))
         data["flow_12"] = data["flow_12"] / base_helmet_size
@@ -290,7 +427,24 @@ def normalize_inputs_outputs(data):
         # minus average(camera?) 差分取りするときには注意するほうがいいかも（事前にとるべきかも）。
         data["flow_12"] = data["flow_12"] - tf.reduce_mean(data["flow_12"], axis=[0,1], keepdims=True)
         data["flow_21"] = data["flow_21"] - tf.reduce_mean(data["flow_21"], axis=[0,1], keepdims=True)
+    """
     data["rectangles"] = data["rectangles"]/tf.cast(tf.stack([[[w,h]]]),tf.float32)
+    return data
+
+def resize_flow_to_warp_w_target_scale(data, target_shape):
+    height, width = target_shape
+    coords = coords_grid(height, width)
+
+    flow_height, flow_width = tf.unstack(tf.shape(data["flow_12"]))[:2]
+    data["stacked_flow"] = tf.stack([data["flow_12"], data["flow_21"]])
+    
+    data["stacked_flow"]= tf.image.resize(data["stacked_flow"], (height, width), method="bilinear")
+    origin_size = tf.cast(tf.stack([flow_width, flow_height]), tf.float32)
+    target_size = tf.cast(tf.stack([width, height]), tf.float32)
+    rate = tf.reshape(target_size / origin_size, [2,])
+    data["stacked_flow"] = data["stacked_flow"] * rate#[tf.newaxis, tf.newaxis, tf.newaxis, :]
+    data["warp_n"] = coords + data["stacked_flow"][0]
+    data["warp_p"] = coords + data["stacked_flow"][1]
     return data
 
 def pair_labels_to_matrix(player_ids, pair_labels):
@@ -338,7 +492,7 @@ def pair_labels_id2indices(player_ids, pair_labels, ground_as_zero=True):
 #MAX_BOX_NUM = 20
 #max_pair_num = 40
 
-def box_xycoords_to_tlbr(data, shuffle_order=True, max_box_num=20, max_pair_num=40, player_pos_exist=True):
+def box_xycoords_to_tlbr(data, shuffle_order=True, max_box_num=20, max_pair_num=40):
     left_tops = tf.reduce_min(data["rectangles"], axis=1)
     right_bottoms = tf.reduce_max(data["rectangles"], axis=1)
     box_tlbr = tf.concat([left_tops[:,::-1], right_bottoms[:,::-1]], axis=-1)
@@ -348,10 +502,6 @@ def box_xycoords_to_tlbr(data, shuffle_order=True, max_box_num=20, max_pair_num=
     mask = (box_size > 1e-6)
     box_tlbr = tf.boolean_mask(box_tlbr, mask)[:max_box_num]
     player_id = tf.boolean_mask(data["player_id"], mask)[:max_box_num]
-    if player_pos_exist:
-        player_positions = tf.boolean_mask(data["player_positions"], mask)[:max_box_num]
-
-
     num_survive = tf.minimum(tf.reduce_sum(tf.cast(mask, tf.int32)), max_box_num)
     
     
@@ -360,7 +510,6 @@ def box_xycoords_to_tlbr(data, shuffle_order=True, max_box_num=20, max_pair_num=
         order = tf.random.shuffle(tf.range(num_survive))
         box_tlbr = tf.gather(box_tlbr, order)
         player_id = tf.gather(player_id, order)
-        player_positions = tf.gather(player_positions, order)
         contact_ids = tf.random.shuffle(contact_ids)
     
     
@@ -371,8 +520,6 @@ def box_xycoords_to_tlbr(data, shuffle_order=True, max_box_num=20, max_pair_num=
     
     num_survive_label = tf.minimum(tf.reduce_sum(tf.cast(contact_ids_mask, tf.int32)), max_pair_num)
     data["player_id"] = player_id
-    if player_pos_exist:
-        data["player_positions"] = player_positions
     data["num_player"] = num_survive
     data["rectangles"] = tf.reshape(box_tlbr, [num_survive,4])
     data["num_labels"] = num_survive_label
@@ -381,7 +528,7 @@ def box_xycoords_to_tlbr(data, shuffle_order=True, max_box_num=20, max_pair_num=
     data["contact_pairlabels"] = contact_pairlabels[:max_pair_num]
     return data
 
-def pad_box_and_labels_if_necessary(data, max_box_num=20, max_pair_num=40, player_pos_exist=True):
+def pad_box_and_labels_if_necessary(data, max_box_num=20, max_pair_num=40):
     invalid_label = tf.constant([[0,0,-1]], dtype=tf.int32)
     num_tile = max_pair_num - data["num_labels"]
     data["contact_pairlabels_indices"] = tf.concat([data["contact_pairlabels_indices"], tf.tile(invalid_label, [num_tile,1])], axis=0)
@@ -391,8 +538,6 @@ def pad_box_and_labels_if_necessary(data, max_box_num=20, max_pair_num=40, playe
     # 無意味にオーバーラップがでるのでやめるべき？、バッチノームの統計値が心配ではある
     num_tile = 1 + (max_box_num - data["num_player"]) // data["num_player"]
     data["rectangles"] = tf.concat([data["rectangles"], tf.tile(data["rectangles"], [num_tile,1])], axis=0)[:max_box_num]
-    if player_pos_exist:
-        data["player_positions"] = tf.concat([data["player_positions"], tf.tile(data["player_positions"], [num_tile,1])], axis=0)[:max_box_num]
     
     #invalid_label = tf.constant([[0.5,0.5,0.5+1e-7, 0.5+1e-7]], dtype=tf.float32)
     #num_tile = max_box_num - data["num_player"]
@@ -401,36 +546,41 @@ def pad_box_and_labels_if_necessary(data, max_box_num=20, max_pair_num=40, playe
     return data
     
 def assign_input_output(data):
-    if LOAD_FLOW:
-        inputs = tf.concat([data["rgb"], data["flow_12"], data["flow_21"]], axis=-1)
-    else:
-        inputs = data["rgb"]
+    #if LOAD_FLOW:
+    #    inputs = tf.concat([data["rgb"], data["flow_12"], data["flow_21"]], axis=-1)
+    #else:
+    #inputs = tf.concat([data["rgb_p"],data["rgb_c"],data["rgb_n"]], axis=-1)
+        
+    #inputs = {"input_rgb": inputs,
+    #          "input_boxes": data["rectangles"],
+    #          "input_pairs": data["contact_pairlabels_indices"][:,:2],
+    #          }
     
-    is_ground = tf.cast(data["contact_pairlabels_indices"][:,1]==0, tf.int32)
-    player_contact_label = data["contact_pairlabels_indices"][:,2] - 10 * is_ground# not use ground
-    
-    inputs = {"input_rgb": inputs,
+    inputs = {"input_rgb_pp": data["rgb_p"],
+              "input_rgb_p": data["rgb_p"],
+              "input_rgb_c": data["rgb_c"],
+              "input_rgb_n": data["rgb_n"],
+              "input_rgb_nn": data["rgb_nn"],
               "input_boxes": data["rectangles"],
-              "input_player_positions": data["player_positions"],
               "input_pairs": data["contact_pairlabels_indices"][:,:2],
-              }
+              #"input_warp_p": data["warp_p"],
+              #"input_warp_n": data["warp_n"],
+                        
+                    }
+    
+    
     outputs = {
               "output_contact_label": data["contact_pairlabels_indices"][:,2],
-              "output_contact_label_player": player_contact_label,
-              "output_contact_label_total": data["contact_pairlabels_indices"][:,2],
               "contact_map": tf.ones((1,1)), # dummy
               }
 
     return inputs, outputs
 
-def assign_input_output_w_info(data, player_pos_exist=False):
+def assign_input_output_w_info(data):
     inputs = {"input_rgb": data["rgb"],
               "input_boxes": data["rectangles"],
               "input_pairs": data["contact_pairlabels_indices"][:,:2],
               }
-    
-    if player_pos_exist:
-        inputs["input_player_positions"] = data["player_positions"]
     outputs = {
               "output_contact_label": data["contact_pairlabels_indices"][:,2],
               "contact_map": tf.ones((1,1)), # dummy
@@ -449,14 +599,19 @@ def get_tf_dataset(list_dataset,
                   max_box_num=20,
                   max_pair_num=40):
     print("start building dataset")
-    
+    #default_grid = coords_grid(list_dataset[0]["img_height"], list_dataset[0]["img_width"])[tf.newaxis,...]
+    default_grid = coords_grid(input_shape[0], input_shape[1])[tf.newaxis,...]
     
     dataset = build_tf_dataset(list_dataset)
     
     dataset = dataset.map(resize_flow_to_rgb, num_parallel_calls=AUTO)
     dataset = dataset.map(transforms, num_parallel_calls=AUTO)
     #dataset = dataset.filter(lambda x: x["rectangle_num"] > 3)
+    
+    #dataset = dataset.map(lambda x: rgbreconst_by_flow(x, default_grid, input_shape), num_parallel_calls=AUTO)
+    
     dataset = dataset.map(normalize_inputs_outputs, num_parallel_calls=AUTO)
+    # dataset = dataset.map(lambda x: resize_flow_to_warp_w_target_scale(x, output_shape), num_parallel_calls=AUTO)
     dataset = dataset.map(lambda x: box_xycoords_to_tlbr(x, max_box_num=max_box_num, max_pair_num=max_pair_num), num_parallel_calls=AUTO)
     dataset = dataset.filter(lambda x: x["num_player"] > 1)
     
@@ -580,10 +735,10 @@ def inference_preprocess(data,
     """
     data = transforms(data)
     data = normalize_inputs_outputs(data)
-    data = box_xycoords_to_tlbr(data, max_box_num=max_box_num, max_pair_num=max_pair_num, shuffle_order=False, player_pos_exist=False)
+    data = box_xycoords_to_tlbr(data, max_box_num=max_box_num, max_pair_num=max_pair_num, shuffle_order=False)
     if padding:
-        data = pad_box_and_labels_if_necessary(data, max_box_num=max_box_num, max_pair_num=max_pair_num, player_pos_exist=False)
-    inputs, targets, other_info = assign_input_output_w_info(data, player_pos_exist=False)
+        data = pad_box_and_labels_if_necessary(data, max_box_num=max_box_num, max_pair_num=max_pair_num)
+    inputs, targets, other_info = assign_input_output_w_info(data)
     return inputs, targets, other_info
 
 
@@ -611,7 +766,7 @@ def inference_preprocess_auto_resize(data,
     data = box_xycoords_to_tlbr(data, max_box_num=max_box_num, max_pair_num=max_pair_num, shuffle_order=False)
     if padding:
         data = pad_box_and_labels_if_necessary(data, max_box_num=max_box_num, max_pair_num=max_pair_num)
-    inputs, targets, other_info = assign_input_output_w_info(data, player_pos_exist=False)
+    inputs, targets, other_info = assign_input_output_w_info(data)
     return inputs, targets, other_info
 
 
@@ -641,7 +796,7 @@ def inference_preprocess_batch(data,
     data = box_xycoords_to_tlbr(data, max_box_num=max_box_num, max_pair_num=max_pair_num, shuffle_order=False)
     if padding:
         data = pad_box_and_labels_if_necessary(data, max_box_num=max_box_num, max_pair_num=max_pair_num)
-    inputs, targets, other_info = assign_input_output_w_info(data, player_pos_exist=False)
+    inputs, targets, other_info = assign_input_output_w_info(data)
     return inputs, targets, other_info
 
 

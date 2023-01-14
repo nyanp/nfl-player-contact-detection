@@ -16,36 +16,29 @@ import time
 import warnings
 
 import matplotlib.pyplot as plt
-# from tensorflow.keras.utils import multi_gpu_model
 import numpy as np
-# import pickle
-# from PIL import Image
 import pandas as pd
 import tensorflow as tf
-from kmat.model.model import (build_model, build_model_nomask,
-                         matthews_correlation_fixed)
+from kmat.model.model import (build_model, build_model_explicit_distance,
+                              build_model_multi, build_model_multiframe,
+                              build_model_multiply_contact,
+                              map_inference_func_wrapper, map_test,
+                              matthews_correlation_fixed)
+from kmat.model.model_mappingnet import build_model_map_previous_competition
+from kmat.train_utils.dataloader import (get_tf_dataset,
+                                         get_tf_dataset_inference,
+                                         get_tf_dataset_inference_auto_resize,
+                                         inference_preprocess, load_dataset)
+from kmat.train_utils.scheduler import lrs_wrapper, lrs_wrapper_cos
+from kmat.train_utils.tf_Augmentations_detection import (
+    Blur, BrightnessContrast, Center_Crop, Center_Crop_by_box_shape,
+    CoarseDropout, Compose, Crop, Crop_by_box_shape, GaussianNoise,
+    HorizontalFlip, HueShift, Oneof, PertialBrightnessContrast, Resize,
+    Rotation, Shadow, ToGlay, VerticalFlip)
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import (Callback, CSVLogger,
                                         LearningRateScheduler, ModelCheckpoint)
 from tensorflow.keras.optimizers import SGD, Adam, RMSprop
-from kmat.train_utils.dataloader import (get_tf_dataset, get_tf_dataset_inference,
-                                         get_tf_dataset_inference_auto_resize,
-                                         inference_preprocess, load_dataset)
-from kmat.train_utils.scheduler import lrs_wrapper, lrs_wrapper_cos
-from kmat.train_utils.tf_Augmentations_detection import (Blur, BrightnessContrast,
-                                                         Center_Crop,
-                                                         Center_Crop_by_box_shape,
-                                                         CoarseDropout, Compose,
-                                                         Crop, Crop_by_box_shape,
-                                                         GaussianNoise,
-                                                         HorizontalFlip, HueShift,
-                                                         Oneof,
-                                                         PertialBrightnessContrast,
-                                                         Resize, Rotation, Shadow,
-                                                         ToGlay, VerticalFlip)
-
-#import cv2
-#import mlflow
 
 
 def view_contact_mask(img, pairs,
@@ -88,7 +81,7 @@ class TrainMonitor(tf.keras.callbacks.Callback):
     TODO add bbox on rgb image
     """
 
-    def __init__(self, mini_dataset, mask_model, num_check=10, num_freq=2):
+    def __init__(self, mini_dataset, mask_model, num_check=15, num_freq=2):
         super(TrainMonitor, self).__init__()
         self.dataset = mini_dataset
         self.mask_model = mask_model
@@ -100,7 +93,7 @@ class TrainMonitor(tf.keras.callbacks.Callback):
         self.mask_model.trainable = False
         if epoch % self.num_freq == 0:
             for inp, targ in self.dataset.take(self.num_check):
-                pred_mask_raw, pred_label = self.mask_model(inp, training=False)
+                pred_mask_raw, _, pred_label = self.mask_model(inp, training=False)
                 pred_label = pred_label.numpy()[0]
                 pred_mask = pred_mask_raw.numpy()[0, :, :, :, 0]
 
@@ -159,17 +152,36 @@ class NFLContact():
         self.is_train_model = is_train_model
         self.weight_file = weight_file
         self.load_model(weight_file, is_train_model)
+        self.use_map_model = False
         print("Loading Models......Finish")
 
     def load_model(self, weight_file=None, is_train_model=False):
         """build model and load weights"""
-        self.model, self.sub_model, self.losses, self.loss_weights, self.metrics = build_model(self.input_shape,
-                                                                                               minimum_stride=self.input_shape[0] // self.output_shape[0],
-                                                                                               is_train=self.is_train_model,
-                                                                                               backbone="effv2s",
-                                                                                               from_scratch=True)
+        #self.map_model = build_model_map_previous_competition(os.path.join(WEIGHT_DIR, "map_model_final_weights_r.h5"))
+        self.model, self.sub_model, self.losses, self.loss_weights, self.metrics = build_model_explicit_distance(self.input_shape,
+                                                                                                                 minimum_stride=self.input_shape[0] // self.output_shape[0],
+                                                                                                                 is_train=self.is_train_model,
+                                                                                                                 backbone="effv2s",
+                                                                                                                 from_scratch=False,
+                                                                                                                 size="SM",
+                                                                                                                 # map_model=self.map_model,
+                                                                                                                 )
+        """
+        self.model, self.sub_model, self.losses, self.loss_weights, self.metrics = build_model_multiframe(self.input_shape,
+                     backbone="effv2s",
+                     minimum_stride=self.input_shape[0]//self.output_shape[0],
+                     max_stride = 64,
+                     is_train=self.is_train_model,
+                     num_boxes = None,
+                     feature_ext_weight=os.path.join(WEIGHT_DIR, f"ex000_contdet_run022_{name}train_ground_othermask/final_weights.h5"),
+                     )
+        """
+
         if not weight_file is None:
-            self.model.load_weights(weight_file)  # , by_name=True, skip_mismatch=True)
+            if is_train_model:
+                self.model.load_weights(weight_file, by_name=True, skip_mismatch=True)
+            else:
+                self.model.load_weights(weight_file)  # , by_name=True)
         if not is_train_model:
             self.sub_model.trainable = False
             for layer in self.model.layers:
@@ -177,6 +189,7 @@ class NFLContact():
                 if "efficient" in layer.name:
                     for l in layer.layers:
                         l.trainable = False
+            self.names_of_model_inputs = [inp.name for inp in self.sub_model.input]
             self.tf_model = tf.function(lambda x: self.sub_model(x))  # , experimental_relax_shapes=True)
             # self.tf_model = lambda x: self.sub_model(x)#, experimental_relax_shapes=True)
 
@@ -251,24 +264,37 @@ class NFLContact():
         else:
             transforms_train = [
                 HorizontalFlip(p=0.5),
+                # Rotation(p=0.5, max_angle=10),
+
                 Crop(p=1, min_height=self.input_shape[0], min_width=self.input_shape[1]),
                 #Crop(p=1, min_height=CROP_SHAPE[0], min_width=CROP_SHAPE[1]),
                 #Resize(height=self.input_shape[0], width=self.input_shape[1], target_height=self.output_shape[0], target_width=self.output_shape[1]),
                 BrightnessContrast(p=1.0),
                 HueShift(p=0.8, min_offset=-0.25, max_offset=0.25),
-                Oneof(
-                    transforms=[PertialBrightnessContrast(p=0.2,
-                                                          max_holes=3, max_height=80, max_width=80,
-                                                          min_holes=1, min_height=30, min_width=30,
-                                                          min_offset=0, max_offset=30,
-                                                          min_multiply=1.0, max_multiply=1.5),
-                                Shadow(p=0.4,
-                                       max_holes=3, max_height=120, max_width=120,
-                                       min_holes=1, min_height=50, min_width=50,
-                                       min_strength=0.2, max_strength=0.8, shadow_color=0.0)
-                                ],
-                    probs=[0.2, 0.2]
-                ),
+
+                # Oneof(
+                #      transforms = [PertialBrightnessContrast(p=0.2,
+                #                                              max_holes=3, max_height=80, max_width=80,
+                #                                              min_holes=1, min_height=30, min_width=30,
+                #                                              min_offset=0, max_offset=30,
+                #                                              min_multiply=1.0, max_multiply=1.5),
+                #                    Shadow(p=0.4,
+                #                           max_holes=3, max_height=120, max_width=120,
+                #                           min_holes=1, min_height=50, min_width=50,
+                #                           min_strength=0.2, max_strength=0.8, shadow_color=0.0)
+                #                    ],
+                #      probs=[0.2,0.2]
+                #      ),
+                PertialBrightnessContrast(p=0.2,
+                                          max_holes=3, max_height=80, max_width=80,
+                                          min_holes=1, min_height=30, min_width=30,
+                                          min_offset=0, max_offset=30,
+                                          min_multiply=1.0, max_multiply=1.5),
+                Shadow(p=0.2,
+                       max_holes=3, max_height=120, max_width=120,
+                       min_holes=1, min_height=50, min_width=50,
+                       min_strength=0.2, max_strength=0.8, shadow_color=0.0),
+
 
                 Blur(p=0.1),
                 GaussianNoise(p=0.1, min_var=10, max_var=40),
@@ -281,16 +307,38 @@ class NFLContact():
                 #Resize(height=self.input_shape[0], width=self.input_shape[1], target_height=self.output_shape[0], target_width=self.output_shape[1]),
             ]
 
-        train_transforms = Compose(transforms_train)
+        train_transforms = Compose(transforms_train[:6])
         val_transforms = Compose(transforms_val)
         """
         # test run
         tfd = get_tf_dataset(train_dataset,
+                             self.input_shape,
+                             self.output_shape,
                        batch_size=1,
                        transforms=train_transforms,
                        is_train=True,
                        max_pair_num=120,)
-        for inp, targ in tfd.take(50):
+        for inp, targ in tfd.take(10):
+
+            p, maps = map_test(self.map_model, inp["input_rgb"], inp["input_boxes"])
+
+            plt.imshow(inp["input_rgb"][0,...,:3])
+            plt.show()
+            #plt.imshow(maps[0,...,:1])
+            #plt.show()
+            #plt.imshow(maps[0,...,1:2])
+            #plt.show()
+            #print(tf.reduce_min(maps[0,...,:2], axis=[0,1]))
+            plt.scatter(x=p[0,:,0], y=p[0,:,1])
+            plt.xlim(-0.7,0.7)
+            plt.ylim(-0.7,0.7)
+            plt.grid()
+            plt.show()
+
+            continue
+
+            outs = self.model(inp)
+
             #print("run model")
             #print(self.model(inp).shape)
             print(tf.math.reduce_std(inp["input_rgb"][...,3:], axis=[0,1,2]))
@@ -298,21 +346,23 @@ class NFLContact():
             print(tf.reduce_min(inp["input_rgb"][...,3:], axis=[0,1,2]))
             mean_size = tf.reduce_mean(inp["input_boxes"][0,...,2] - inp["input_boxes"][0,...,0])
             plt.imshow(inp["input_rgb"][0,...,:3])
-            plt.title(mean_size.numpy())
+            #plt.title(mean_size.numpy())
             plt.show()
             print(tf.reduce_sum(tf.cast(targ["output_contact_label"][0]>-1, tf.float32)), "HAVELABELL")
-            #plt.imshow(inp["input_rgb"][0,...,3:4])
-            #plt.show()
-            #plt.imshow(inp["input_rgb"][0,...,5:6])
-            #plt.show()
-            #plt.imshow(inp["input_rgb"][0,...,4:5])
-            #plt.show()
-            #plt.imshow(inp["input_rgb"][0,...,6:7])
-            #plt.show()
+            plt.imshow(inp["input_rgb"][0,...,3:6])
+            plt.show()
+            plt.imshow(inp["input_rgb"][0,...,6:9])
+            plt.show()
 
+            #print(tf.reduce_max(inp["input_rgb"][0,...,3:4]))
+            #print(tf.reduce_max(inp["input_rgb"][0,...,4:5]))
+            #print(tf.reduce_max(inp["input_rgb"][0,...,5:6]))
         raise Exception
         #"""
-        monitor_dataset = get_tf_dataset(val_dataset[:100],
+        print()
+        monitor_dataset = get_tf_dataset(val_dataset[0:100],
+                                         self.input_shape,
+                                         self.output_shape,
                                          batch_size=1,
                                          transforms=val_transforms,
                                          is_train=False,
@@ -321,8 +371,8 @@ class NFLContact():
 
         print("step per epoch", num_data[0] // batch_size, num_data[1] // batch_size)
         self.hist = self.model.fit(get_tf_dataset(train_dataset,
-                                                  # self.input_shape,
-                                                  # self.output_shape,
+                                                  self.input_shape,
+                                                  self.output_shape,
                                                   batch_size=batch_size,
                                                   transforms=train_transforms,
                                                   is_train=True,
@@ -332,15 +382,15 @@ class NFLContact():
                                    steps_per_epoch=num_data[0] // batch_size,
                                    epochs=n_epoch,
                                    validation_data=get_tf_dataset(val_dataset,
-                                                                  # self.input_shape,
-                                                                  # self.output_shape,
+                                                                  self.input_shape,
+                                                                  self.output_shape,
                                                                   batch_size=batch_size,
                                                                   transforms=val_transforms,
                                                                   max_pair_num=50,
                                                                   is_train=False,
                                                                   ),
                                    validation_steps=num_data[1] // batch_size,
-                                   callbacks=[lr_schedule, logger, cp_callback, monitor],
+                                   callbacks=[lr_schedule, logger, cp_callback, monitor] if not DEBUGMODE else [lr_schedule, logger, cp_callback],
                                    )
         print("Saving weights and results...")
         self.model.save_weights(save_dir + "final_weights.h5")
@@ -348,10 +398,22 @@ class NFLContact():
         pd.DataFrame(self.hist.history).to_csv(csv_hist, index=False)
         print("Done")
 
-    def predict(self, input_rgb, input_boxes, input_pairs):
-        inputs = [input_rgb, input_boxes, input_pairs]
-        preds = self.tf_model(inputs)
-        return preds
+    def combine_map_model(self, weight_file):
+        map_model = build_model_map_previous_competition(weight_file)
+        self.tf_map_model = map_inference_func_wrapper(map_model, include_resize=True)
+        self.use_map_model = True
+
+    def predict(self, inputs_dict,
+                #input_rgb, input_boxes, input_player_positions, input_pairs,
+                ):
+        """
+        inputs = [input_rgb, input_boxes, (input_player_positions), input_pairs]
+        """
+        if self.use_map_model and "input_player_positions" not in inputs_dict.keys():
+            player_pos, map_xy = self.tf_map_model(inputs_dict["input_rgb"], inputs_dict["input_boxes"])
+            inputs_dict["input_player_positions"] = player_pos
+        preds = self.tf_model([inputs_dict[k] for k in self.names_of_model_inputs])
+        return preds, inputs_dict
 
 
 def set_seeds(num=111):
@@ -413,7 +475,9 @@ def run_training_main(epochs=20,
     ###train_files = load_dataset(end_path[120:] + side_path[120:])
     #val_files = load_dataset(end_path[120:] + side_path[120:])[::5]
     ###val_files = load_dataset(end_path[:120] + side_path[:120])[::5]
-
+    if DEBUGMODE:
+        train_path = train_path[:4]
+        val_path = val_path[:4]
     train_files = load_dataset(train_path)
     val_files = load_dataset(val_path)[::10]
 
@@ -451,27 +515,11 @@ def run_validation_predict(load_path,
                            input_shape=(704, 1280, 3),
                            output_shape=(352, 640),
                            draw_pred=False):
+
+    from_map_model = True
+
     K.clear_session()
     set_seeds(111)
-    """
-    paths_endzone = sorted(glob.glob(DATA_PATH + "*Endzone"))
-    paths_sideline = sorted(glob.glob(DATA_PATH + "*Sideline"))
-    np.random.shuffle(paths_endzone)
-    np.random.shuffle(paths_sideline)
-
-    end_path = sorted(glob.glob(os.path.join(DATA_PATH, "*Endzone")))
-    side_path = sorted(glob.glob(os.path.join(DATA_PATH, "*Sideline")))
-    shuffle_indices = np.arange(len(end_path))
-    np.random.shuffle(shuffle_indices)
-    end_path = [end_path[idx] for idx in shuffle_indices]
-    side_path = [side_path[idx] for idx in shuffle_indices]
-    print("ALL", len(end_path), len(side_path))
-    #path = os.path.join(DATA_PATH, "58168_003392_Endzone/")
-    #train_files = load_dataset(end_path[:40] + side_path[:40])
-    val_files = load_dataset(end_path[-8:] + side_path[-8:])
-    print(len(val_files))
-    np.random.shuffle(val_files)
-    """
 
     end_path = sorted(glob.glob(os.path.join(DATA_PATH, "*Endzone")))
     side_path = sorted(glob.glob(os.path.join(DATA_PATH, "*Sideline")))
@@ -494,7 +542,7 @@ def run_validation_predict(load_path,
         train_path = path_fold_23
         val_path = path_fold_01
 
-    val_files = load_dataset(val_path[:])[::5]
+    val_files = load_dataset(val_path[:2])[::5]
     print(len(val_files))
     np.random.shuffle(val_files)
 
@@ -514,11 +562,11 @@ def run_validation_predict(load_path,
                         "is_train_model": False,
                         }
     else:
-        batch_size = 1
+        batch_size = 8
         transforms = [
-            #Center_Crop(p=1, min_height=input_shape[0], min_width=input_shape[1]),
+            Center_Crop(p=1, min_height=input_shape[0], min_width=input_shape[1]),
             #Resize(height=input_shape[0], width=input_shape[1], target_height=output_shape[0], target_width=output_shape[1]),
-            Resize(height=input_shape[0], width=input_shape[1], target_height=output_shape[0], target_width=output_shape[1]),
+            #Resize(height=input_shape[0], width=input_shape[1], target_height=output_shape[0], target_width=output_shape[1]),
 
         ]
         transforms = Compose(transforms)
@@ -528,6 +576,13 @@ def run_validation_predict(load_path,
                                               max_box_num=23,
                                               max_pair_num=max_pair,  # enough large
                                               )
+        # tf_dataset = get_tf_dataset(val_files,
+        #                     input_shape,
+        #                     output_shape,
+        #               batch_size=1,
+        #               transforms=transforms,
+        #               is_train=False,
+        #               max_pair_num=max_pair)
 
         model_params = {"input_shape": input_shape,
                         "output_shape": output_shape,
@@ -535,6 +590,9 @@ def run_validation_predict(load_path,
                         "is_train_model": False,
                         }
     nfl = NFLContact(**model_params)
+
+    if from_map_model:
+        nfl.combine_map_model(os.path.join(WEIGHT_DIR, "map_model_final_weights_r.h5"))
 
     """
     inp, targ, info = inference_preprocess(val_files[-1],
@@ -555,8 +613,8 @@ def run_validation_predict(load_path,
         # plt.title(mean_size.numpy())
         # plt.show()
 
-        preds = nfl.predict(**inp)
-        pred_mask, pred_label = preds
+        preds, inp = nfl.predict(inp)
+        pred_mask, _, pred_label = preds
 
         if draw_pred:
             dev = abs(pred_label.numpy()[0] - targ["output_contact_label"].numpy()[0]) * (targ["output_contact_label"].numpy()[0] > 0)
@@ -582,6 +640,7 @@ def run_validation_predict(load_path,
         time_elapsed = time.time() - start_time
         fps_inference = counter / time_elapsed
         print(f"\r{round(fps_inference, 1)} fps, at {counter} / {len(val_files)}data", end="")
+    print(inp["input_pairs"].numpy().shape, pred_label.numpy().shape, targ["output_contact_label"].numpy().shape)
     print(np.sum(gt_labels))
     print(np.sum(predicted_labels))
     print(len(predicted_labels))
@@ -613,6 +672,76 @@ def run_validation_predict(load_path,
         print(th, matthews_correlation_fixed(gt_labels_w_easy_sample, predicted_labels_w_easy_sample, threshold=th))
 
 
+def prepare_mapping_data():
+    input_shape = (512, 896, 3)
+    output_shape = (128, 224)
+    map_model = build_model_map_previous_competition(os.path.join(WEIGHT_DIR, "map_model_final_weights_r.h5"))
+
+    tf_map_model = map_inference_func_wrapper(map_model)
+
+    K.clear_session()
+    set_seeds(111)
+
+    end_path = sorted(glob.glob(os.path.join(DATA_PATH, "*Endzone")))
+    side_path = sorted(glob.glob(os.path.join(DATA_PATH, "*Sideline")))
+    game_names = [int(os.path.basename(p).split("_", 1)[0]) for p in end_path]
+    print("ALL", len(end_path), len(side_path))
+    all_path = end_path[:] + side_path[:]
+    all_data = load_dataset(all_path)
+    print(all_path)
+    batch_size = 16
+    transforms = [Resize(height=input_shape[0], width=input_shape[1], target_height=output_shape[0], target_width=output_shape[1]),
+                  ]
+    transforms = Compose(transforms)
+    tf_dataset = get_tf_dataset_inference(all_data,
+                                          transforms,
+                                          batch_size=batch_size,
+                                          max_box_num=23,
+                                          max_pair_num=20,  # not use
+                                          padding=True)
+
+    filenames_label = [data["file"].replace(".jpg", "_label.json") for data in all_data]
+    filenames_save = [data["file"].replace(".jpg", "_pos.npy") for data in all_data]
+    start_time = time.time()
+    counter = 0
+    predicted_positions = []
+    gt_labels = []
+    ground_labels = []
+    draw_pred = True
+    print(len(filenames_save), filenames_save[0], filenames_save[-1])
+    for i, [inp, targ, info] in enumerate(tf_dataset):  # .take(1000):
+        #mean_size = tf.reduce_mean(inp["input_boxes"][0,...,2] - inp["input_boxes"][0,...,0])
+        # plt.imshow(inp["input_rgb"][0,...,:3])
+        # plt.title(mean_size.numpy())
+        # plt.show()
+
+        preds = tf_map_model(inp["input_rgb"], inp["input_boxes"])
+        player_pos, map_xy = preds
+
+        if draw_pred and i % 10 == 0:
+            plt.imshow(inp["input_rgb"][0, ..., :3])
+            plt.show()
+            plt.scatter(x=player_pos[0, :, 0], y=player_pos[0, :, 1])
+            plt.xlim(-0.7, 0.7)
+            plt.ylim(-0.7, 0.7)
+            plt.grid()
+            plt.show()
+
+        for positions, num in zip(player_pos.numpy(), info["num_player"]):
+            predicted_positions += [positions[:num]]
+            #gt_labels += list(gt[:num])
+            #ground_labels += list((pairs[:num,1]==0))
+
+        counter += batch_size
+        time_elapsed = time.time() - start_time
+        fps_inference = counter / time_elapsed
+        print(f"\r{round(fps_inference, 1)} fps, at {counter} / {len(all_data)}data", end="")
+    print(len(filenames_save), len(predicted_positions))
+
+    for save_npy, preds in zip(filenames_save, predicted_positions):
+        np.save(save_npy, preds.astype(np.float32))
+
+
 # metricsじっそう！！！ LR大き目。　少し解像度小さいかも。切り取るのは要検討。いらないならcoordsはずして任意サイズにするのも手だと思う
 # とりあえずアテンションモデルをトライ。
 """
@@ -629,7 +758,54 @@ def run_validation_predict(load_path,
 
 グランドコンタクトとコンタクトマップ別でもいいかも？
 
+クロスエリアでのアベレージプーリングを見てみる。
+concatモデルも引っ付けるタイミングで存在する箇所以外をゼロ特徴にした方がいい。
 """
+
+"""
+full------
+0.1 tf.Tensor(0.57761735, shape=(), dtype=float32)
+0.1 tf.Tensor(0.61934906, shape=(), dtype=float32)
+0.2 tf.Tensor(0.6039987, shape=(), dtype=float32)
+0.2 tf.Tensor(0.64007574, shape=(), dtype=float32)
+0.30000000000000004 tf.Tensor(0.6094741, shape=(), dtype=float32)
+0.30000000000000004 tf.Tensor(0.64211756, shape=(), dtype=float32)
+0.4 tf.Tensor(0.60308003, shape=(), dtype=float32)
+0.4 tf.Tensor(0.6329983, shape=(), dtype=float32)
+0.5 tf.Tensor(0.5858064, shape=(), dtype=float32)
+0.5 tf.Tensor(0.6135026, shape=(), dtype=float32)
+0.6 tf.Tensor(0.5562146, shape=(), dtype=float32)
+0.6 tf.Tensor(0.58200425, shape=(), dtype=float32)
+0.7000000000000001 tf.Tensor(0.5163115, shape=(), dtype=float32)
+0.7000000000000001 tf.Tensor(0.54008555, shape=(), dtype=float32)
+0.8 tf.Tensor(0.4576216, shape=(), dtype=float32)
+0.8 tf.Tensor(0.47903767, shape=(), dtype=float32)
+0.9 tf.Tensor(0.36975214, shape=(), dtype=float32)
+0.9 tf.Tensor(0.387412, shape=(), dtype=float32)
+
+
+
+
+0.1 tf.Tensor(0.61401916, shape=(), dtype=float32)
+0.1 tf.Tensor(0.653427, shape=(), dtype=float32)
+0.2 tf.Tensor(0.6386479, shape=(), dtype=float32)
+0.2 tf.Tensor(0.67340994, shape=(), dtype=float32)
+0.30000000000000004 tf.Tensor(0.6460579, shape=(), dtype=float32)
+0.30000000000000004 tf.Tensor(0.6779122, shape=(), dtype=float32)
+0.4 tf.Tensor(0.6386217, shape=(), dtype=float32)
+0.4 tf.Tensor(0.6683014, shape=(), dtype=float32)
+0.5 tf.Tensor(0.6191587, shape=(), dtype=float32)
+0.5 tf.Tensor(0.6469996, shape=(), dtype=float32)
+0.6 tf.Tensor(0.59643066, shape=(), dtype=float32)
+0.6 tf.Tensor(0.6227849, shape=(), dtype=float32)
+0.7000000000000001 tf.Tensor(0.57228583, shape=(), dtype=float32)
+0.7000000000000001 tf.Tensor(0.5974951, shape=(), dtype=float32)
+0.8 tf.Tensor(0.5344469, shape=(), dtype=float32)
+0.8 tf.Tensor(0.55841565, shape=(), dtype=float32)
+0.9 tf.Tensor(0.45934093, shape=(), dtype=float32)
+0.9 tf.Tensor(0.48022786, shape=(), dtype=float32)
+"""
+
 if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
@@ -639,6 +815,9 @@ if __name__ == "__main__":
     DEBUG = args.debug
     batch_rate = args.batch_rate
     """
+
+    # TODO!!!! MAPモデル引っ付けた推論モデルつくる。
+    DEBUGMODE = False
     DEBUG = False
     num_epoch = 2 if DEBUG else 20
 
@@ -657,18 +836,39 @@ if __name__ == "__main__":
 
     # normal resolution model
     #FIXED_SIZE_DETECTION = False
-    VAL23 = False
+    # 画像系特徴ロールとるの試す。あなうめ。
+    VAL23 = True
     if VAL23:
         name = "fold01"
     else:
         name = "fold23"
 
+    # めも。変化があった場合はDevのせいかワープのせいか切り分けたい。
+
     run_train = True
     AUTO_RESIZE = False
+
+    # prepare_mapping_data() つかう１
+    #raise Exception()
+
     if run_train:
         #CROP_SHAPE=(432, 768, 3)
         FIXED_SIZE_DETECTION = False
-        save_path = os.path.join(WEIGHT_DIR, f"ex000_contdet_run024_{name}train_ground_othermask/")
+        """
+        SIZE = "MM"
+        save_path = os.path.join(WEIGHT_DIR, f"ex000_contdet_run032_{name}train_108crop6cbr/")
+        run_training_main(epochs=num_epoch,
+                          batch_size=int(6),#int(12),
+                         ##input_shape=(512+64, 896+128, 3),#(384, 640, 3),
+                         ##output_shape=(256+32, 448+64),
+                         input_shape=(512, 896, 3),#(384, 640, 3),
+                         output_shape=(256, 448),
+                         #(192, 320),
+                         load_path=None,#os.path.join(WEIGHT_DIR, "map_model_final_weights.h5"),
+                         save_path=save_path)
+        """
+        # SIZE = "SM"
+        save_path = os.path.join(WEIGHT_DIR, f"ex000_contdet_run40_{name}train_72crop6cbr_concat_distance_plus_ground/")
         run_training_main(epochs=num_epoch,
                           batch_size=int(6),  # int(12),
                           # input_shape=(512+64, 896+128, 3),#(384, 640, 3),
@@ -676,19 +876,16 @@ if __name__ == "__main__":
                           input_shape=(512, 896, 3),  # (384, 640, 3),
                           output_shape=(256, 448),
                           #(192, 320),
-                          load_path=None,  # os.path.join(WEIGHT_DIR, "map_model_final_weights.h5"),
+                          load_path=os.path.join(WEIGHT_DIR, "map_model_final_weights.h5"),
                           save_path=save_path)
 
     else:
-        print("RESIZE modeに注意")
-        # ex000_contdet_run015_fold01train_fixed_size
-        # ex000_contdet_run016_fold01train_not_fixed_size
-        run_validation_predict(os.path.join(WEIGHT_DIR, f"ex000_contdet_run021_{name}train_zoom/final_weights.h5"),
-                               input_shape=(960, 1728, 3),
-                               output_shape=(480, 864),
-                               #input_shape=(704, 1280, 3),
-                               #output_shape=(352, 640),
-                               draw_pred=True)
+        run_validation_predict(os.path.join(WEIGHT_DIR, f"ex000_contdet_run036_{name}train_72crop6cbr_concat_distance/final_weights.h5"),
+                               #input_shape=(960, 1728, 3),
+                               #output_shape=(480, 864),
+                               input_shape=(704, 1280, 3),
+                               output_shape=(352, 640),
+                               draw_pred=False)
 
     """
     VAL23 = False

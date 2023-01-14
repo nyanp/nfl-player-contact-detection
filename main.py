@@ -181,7 +181,7 @@ def train(cfg: Config):
         tr_helmets = read_csv_with_cache("train_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
         tr_meta = pd.read_csv(os.path.join(cfg.INPUT, "train_video_metadata.csv"),
                               parse_dates=["start_time", "end_time", "snap_time"])
-        tr_regist = match_p2p_with_cache("train_registration.f", tracking=tr_tracking, helmets=tr_helmets, meta=tr_meta)
+        tr_regist = match_p2p_with_cache(os.path.join(cfg.CACHE, "train_registration.f"), tracking=tr_tracking, helmets=tr_helmets, meta=tr_meta)
 
     with timer("assign helmet metadata"):
         train_df = expand_helmet(cfg, train_df, "train")
@@ -228,7 +228,7 @@ def inference(cfg: Config):
         te_helmets = read_csv_with_cache("test_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
         te_meta = pd.read_csv(os.path.join(cfg.INPUT, "test_video_metadata.csv"),
                               parse_dates=["start_time", "end_time", "snap_time"])
-        te_regist = match_p2p_with_cache("test_registration.f", tracking=te_tracking, helmets=te_helmets, meta=te_meta)
+        te_regist = match_p2p_with_cache(os.path.join(cfg.CACHE, "test_registration.f"), tracking=te_tracking, helmets=te_helmets, meta=te_meta)
 
         df_args = []
         if cfg.CAMARO_DF_PATH:
@@ -260,7 +260,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp020_exp048_both_org_and_agg_shift_diff',
+        EXP_NAME='exp021_update_kmat0108',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,

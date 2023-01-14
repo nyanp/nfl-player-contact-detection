@@ -16,7 +16,7 @@ from feature_engineering.table import add_basic_features, tracking_prep
 from kmat.model.model import matthews_correlation_fixed
 from kmat.train_contact_det import NFLContact, view_contact_mask
 from kmat.train_utils.dataloader import inference_preprocess
-from kmat.train_utils.tf_Augmentations_detection import Center_Crop, Compose
+from kmat.train_utils.tf_Augmentations_detection import Center_Crop, Compose, ComposeNopos
 from utils.nfl import (TRACK_COLS, Config, ModelSize, expand_contact_id, expand_helmet, merge_tracking,
                        read_csv_with_cache)
 
@@ -215,7 +215,10 @@ class Video2Input():
         self.video_name = os.path.basename(video_path)
         print(f"Preparing {self.video_name}")
         self.labels = labels.copy()  # .query("video == @self.video_name").copy()
-        self.helms = helms.query("video == @self.video_name").copy()
+        game, play, view = self.video_name.split('.')[0].split('_')
+        game_play = '_'.join([game, play])
+        # self.helms = helms.query("video == @self.video_name").copy()
+        self.helms = helms.query("game_play == @game_play & view == @view").copy()
         min_frame = self.helms["frame"].values[np.argmin(self.helms["step"].values)]
         self.start_frame = max(0, min_frame - 5)
         self.vidcap = cv2.VideoCapture(video_path)
@@ -341,7 +344,7 @@ foldとるところ少し一時的。。。
 """
 
 
-def build_model(input_shape, output_shape, load_path, num_max_pair=153):
+def build_model(input_shape, output_shape, load_path, load_map_path, num_max_pair=153):
 
     model_params = {"input_shape": input_shape,
                     "output_shape": output_shape,
@@ -349,11 +352,12 @@ def build_model(input_shape, output_shape, load_path, num_max_pair=153):
                     "is_train_model": False,
                     }
     model = NFLContact(**model_params)
+    model.combine_map_model(load_map_path)
 
     transforms = [
         Center_Crop(p=1, min_height=input_shape[0], min_width=input_shape[1]),
     ]
-    transforms = Compose(transforms)
+    transforms = ComposeNopos(transforms)
 
     def preprocessor(x):
         return inference_preprocess(x,
@@ -361,45 +365,49 @@ def build_model(input_shape, output_shape, load_path, num_max_pair=153):
                                     max_box_num=23,
                                     max_pair_num=num_max_pair,  # enough large
                                     padding=True)
+    # load なんかうまくいっていないときがある？？とりあえず再ロードで対策。なんでだ。
+    model.model.trainable = True
+    model.model.load_weights(load_path)
+    model.model.trainable = False
     return model, preprocessor
 
 
-def get_foldcnntrain_set(train_df, train_01_val_23=False):
-    # get game_play
-    # fold_info = pd.read_csv(f"{KMAT_PATH}/output/game_fold.csv")
-    # fold_01_game = fold_info.loc[np.logical_or(fold_info["fold"] == 0, fold_info["fold"] == 1), "game"].values
-    # fold_23_game = fold_info.loc[np.logical_or(fold_info["fold"] == 2, fold_info["fold"] == 3), "game"].values
+# def get_foldcnntrain_set(train_df, train_01_val_23=False):
+#     # get game_play
+#     # fold_info = pd.read_csv(f"{KMAT_PATH}/output/game_fold.csv")
+#     # fold_01_game = fold_info.loc[np.logical_or(fold_info["fold"] == 0, fold_info["fold"] == 1), "game"].values
+#     # fold_23_game = fold_info.loc[np.logical_or(fold_info["fold"] == 2, fold_info["fold"] == 3), "game"].values
 
-    # game_play_names = list(train_df["game_play"].unique())
-    # game_names = [int(gp.rsplit("_", 1)[0]) for gp in game_play_names]
-    # mask_fold_01 = [name in fold_01_game for name in game_names]
-    # mask_fold_23 = [name in fold_23_game for name in game_names]
+#     # game_play_names = list(train_df["game_play"].unique())
+#     # game_names = [int(gp.rsplit("_", 1)[0]) for gp in game_play_names]
+#     # mask_fold_01 = [name in fold_01_game for name in game_names]
+#     # mask_fold_23 = [name in fold_23_game for name in game_names]
 
-    # game_play_fold_23 = np.array(game_play_names)[np.array(mask_fold_23)]
-    # game_play_fold_01 = np.array(game_play_names)[np.array(mask_fold_01)]
+#     # game_play_fold_23 = np.array(game_play_names)[np.array(mask_fold_23)]
+#     # game_play_fold_01 = np.array(game_play_names)[np.array(mask_fold_01)]
 
-    train_title = "fold01" if train_01_val_23 else "fold23"
-    # val_title = "fold23" if train_01_val_23 else "fold01"
+#     train_title = "fold01" if train_01_val_23 else "fold23"
+#     # val_title = "fold23" if train_01_val_23 else "fold01"
 
-    # val_set = game_play_fold_23 if train_01_val_23 else game_play_fold_01
-    # print(f"train by {train_title}, val by {len(val_set)} {val_title}")
+#     # val_set = game_play_fold_23 if train_01_val_23 else game_play_fold_01
+#     # print(f"train by {train_title}, val by {len(val_set)} {val_title}")
 
-    load_path = f"{KMAT_PATH}/model/weights/ex000_contdet_run022_{train_title}train_ground_othermask/final_weights.h5"
-    input_shape = (704, 1280, 3)
-    output_shape = (352, 640)
-    num_max_pair = train_df.groupby(["game_play", "step"])["nfl_player_id_2"].size().max()
-    print(f"cnn model predict {num_max_pair} pairs at max")
-    model, preprocessor = build_model(input_shape, output_shape, load_path, num_max_pair)
-    return model, preprocessor, val_set
+#     load_path = f"{KMAT_PATH}/model/weights/ex000_contdet_run022_{train_title}train_ground_othermask/final_weights.h5"
+#     input_shape = (704, 1280, 3)
+#     output_shape = (352, 640)
+#     num_max_pair = train_df.groupby(["game_play", "step"])["nfl_player_id_2"].size().max()
+#     print(f"cnn model predict {num_max_pair} pairs at max")
+#     model, preprocessor = build_model(input_shape, output_shape, load_path, num_max_pair)
+#     return model, preprocessor, val_set
 
 
-def load_model(train_df, load_path):
+def load_model(train_df, load_path, load_map_path):
     # load_path = f"{KMAT_PATH}/model/weights/ex000_contdet_run022_{train_title}train_ground_othermask/final_weights.h5"
     input_shape = (704, 1280, 3)
     output_shape = (352, 640)
     num_max_pair = train_df.groupby(["game_play", "step"])["nfl_player_id_2"].size().max()
     print(f"cnn model predict {num_max_pair} pairs at max")
-    model, preprocessor = build_model(input_shape, output_shape, load_path, num_max_pair)
+    model, preprocessor = build_model(input_shape, output_shape, load_path, load_map_path, num_max_pair)
     return model, preprocessor
 
 
@@ -409,16 +417,16 @@ class CNNEnsembler:
         self.num_models = len(models)
         self.num_output_items = num_output_items
 
-    def predict(self, *args, **kargs):
+    def predict(self, inputs):
         predictions = [[] for _ in range(self.num_output_items)]
         for model in self.models:
-            preds = model.predict(*args, **kargs)
+            preds, inputs = model.predict(inputs)
             if len(preds) != self.num_output_items:
                 raise Exception("set num_output_item correctly")
             for i in range(self.num_output_items):
                 predictions[i].append(preds[i])
         predictions = [tf.reduce_mean(tf.stack(preds), axis=0) for preds in predictions]
-        return predictions
+        return predictions, inputs  # inputs include positions, (output mapping model)
 
 
 def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playes_to_pred, model, preprocessor, is_train_dataset=True):
@@ -496,8 +504,9 @@ def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playe
                     _, targ = stacked_targets.get_if_ready(neglect_readiness=is_last_batch)
                     _, info = stacked_info.get_if_ready(neglect_readiness=is_last_batch)
 
-                    preds = model.predict(**inp)
-                    pred_mask, pred_label = preds
+                    preds, inp = model.predict(inp)  # inputs include positions, (output mapping model)
+                    pred_mask, pred_label_wo_map, pred_label = preds  # pred_label_wo_map is not using. old output
+                    # pred_mask, pred_label, _ = preds # pred_label_wo_map is not using. old output
 
                     if draw_pred:
                         view_contact_mask(inp["input_rgb"].numpy()[0],
@@ -531,7 +540,7 @@ def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playe
             df_pred["frame"] = frame_numbers
             df_pred["gt_tmp"] = gt_labels
 
-            df_pred = df_pred.groupby(["step", "game_play", "nfl_player_id_1", "nfl_player_id_2"]).mean().reset_index()
+            # df_pred = df_pred.groupby(["step", "game_play", "nfl_player_id_1", "nfl_player_id_2"]).mean().reset_index()
             # min, max, mean
             if view == "Sideline":
                 df_cnn_preds_side.append(df_pred)
@@ -550,58 +559,67 @@ def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playe
     return df_cnn_preds_end, df_cnn_preds_side
 
 
-def cnn_features_val(train_df, tr_tracking, tr_helmets, tr_video_metadata, cnn_pred_path="/kaggle/input/nfl2cnnpred1218"):
+def postprocess_cnn_all_frame_outputs(df_pred):
+    # 追加。フレーム単位出力の場合、この辺で適当に処理を加える
+    # ここで追加したものは、後段のcnn_features関数でマージされる。特別指定しない限りは追加したものは全てマージされる（はず
+    # df_predのcolumnsは"game_play", "step", "frame", "nfl_player_id_1", "nfl_player_id_2", "cnn_pred_Sideline" or "cnn_pred_Endzone", "gt_tmp"
+    # TODO gt_tmpはゴミ。捨てる。cnn_predの名称統一した方が便利かも…。
+    df_pred = df_pred.groupby(["step", "game_play", "nfl_player_id_1", "nfl_player_id_2"]).mean().reset_index()
+    return df_pred
 
-    if "distance" in train_df.columns:
-        dist_btw_players = train_df["distance"].copy()
-    else:
-        dist_btw_players = distance(train_df["x_position_1"], train_df["y_position_1"], train_df["x_position_2"], train_df["y_position_2"])
-    dist_thresh = 3
-    ground_id = train_df["nfl_player_id_2"].min()
-    train_df_mini = train_df[np.logical_or(dist_btw_players < dist_thresh, train_df["nfl_player_id_2"] == ground_id)].copy()
-    train_df_mini['nfl_player_id_2'] = train_df_mini['nfl_player_id_2'].replace(ground_id, 0).astype(int)
+# TODO 推論で使われていないのでコード取り込み時に更新していない
+# def cnn_features_val(train_df, tr_tracking, tr_helmets, tr_video_metadata, cnn_pred_path="/kaggle/input/nfl2cnnpred1218"):
 
-    if os.path.exists(cnn_pred_path):
-        print("load existing pred file")
-        df_cnn_preds_end_01 = pd.read_csv(os.path.join(cnn_pred_path, "fold01_cnn_pred_end.csv"))
-        df_cnn_preds_side_01 = pd.read_csv(os.path.join(cnn_pred_path, "fold01_cnn_pred_side.csv"))
-        df_cnn_preds_end_23 = pd.read_csv(os.path.join(cnn_pred_path, "fold23_cnn_pred_end.csv"))
-        df_cnn_preds_side_23 = pd.read_csv(os.path.join(cnn_pred_path, "fold23_cnn_pred_side.csv"))
+#     if "distance" in train_df.columns:
+#         dist_btw_players = train_df["distance"].copy()
+#     else:
+#         dist_btw_players = distance(train_df["x_position_1"], train_df["y_position_1"], train_df["x_position_2"], train_df["y_position_2"])
+#     dist_thresh = 3
+#     ground_id = train_df["nfl_player_id_2"].min()
+#     train_df_mini = train_df[np.logical_or(dist_btw_players < dist_thresh, train_df["nfl_player_id_2"] == ground_id)].copy()
+#     train_df_mini['nfl_player_id_2'] = train_df_mini['nfl_player_id_2'].replace(ground_id, 0).astype(int)
 
-        df_cnn_preds_end_01[["nfl_player_id_1", "nfl_player_id_2"]] = df_cnn_preds_end_01[["nfl_player_id_1", "nfl_player_id_2"]].astype(int)
-        df_cnn_preds_side_01[["nfl_player_id_1", "nfl_player_id_2"]] = df_cnn_preds_side_01[["nfl_player_id_1", "nfl_player_id_2"]].astype(int)
-        df_cnn_preds_end_23[["nfl_player_id_1", "nfl_player_id_2"]] = df_cnn_preds_end_23[["nfl_player_id_1", "nfl_player_id_2"]].astype(int)
-        df_cnn_preds_side_23[["nfl_player_id_1", "nfl_player_id_2"]] = df_cnn_preds_side_23[["nfl_player_id_1", "nfl_player_id_2"]].astype(int)
+#     if os.path.exists(cnn_pred_path):
+#         print("load existing pred file")
+#         df_cnn_preds_end_01 = pd.read_csv(os.path.join(cnn_pred_path, "fold01_cnn_pred_end.csv"))
+#         df_cnn_preds_side_01 = pd.read_csv(os.path.join(cnn_pred_path, "fold01_cnn_pred_side.csv"))
+#         df_cnn_preds_end_23 = pd.read_csv(os.path.join(cnn_pred_path, "fold23_cnn_pred_end.csv"))
+#         df_cnn_preds_side_23 = pd.read_csv(os.path.join(cnn_pred_path, "fold23_cnn_pred_side.csv"))
 
-    else:
-        print("start CNN validation pred")
+#         df_cnn_preds_end_01[["nfl_player_id_1", "nfl_player_id_2"]] = df_cnn_preds_end_01[["nfl_player_id_1", "nfl_player_id_2"]].astype(int)
+#         df_cnn_preds_side_01[["nfl_player_id_1", "nfl_player_id_2"]] = df_cnn_preds_side_01[["nfl_player_id_1", "nfl_player_id_2"]].astype(int)
+#         df_cnn_preds_end_23[["nfl_player_id_1", "nfl_player_id_2"]] = df_cnn_preds_end_23[["nfl_player_id_1", "nfl_player_id_2"]].astype(int)
+#         df_cnn_preds_side_23[["nfl_player_id_1", "nfl_player_id_2"]] = df_cnn_preds_side_23[["nfl_player_id_1", "nfl_player_id_2"]].astype(int)
 
-        train_01_val_23 = False
-        model, preprocessor, val_set = get_foldcnntrain_set(train_df_mini, train_01_val_23=train_01_val_23)
-        df_cnn_preds_end_01, df_cnn_preds_side_01 = pred_by_cnn(
-            train_df_mini, tr_tracking, tr_helmets, tr_video_metadata, val_set, model, preprocessor, is_train_dataset=True)
+#     else:
+#         print("start CNN validation pred")
 
-        train_01_val_23 = True
-        model, preprocessor, val_set = get_foldcnntrain_set(train_df_mini, train_01_val_23=train_01_val_23)
-        df_cnn_preds_end_23, df_cnn_preds_side_23 = pred_by_cnn(
-            train_df_mini, tr_tracking, tr_helmets, tr_video_metadata, val_set, model, preprocessor, is_train_dataset=True)
+#         train_01_val_23 = False
+#         model, preprocessor, val_set = get_foldcnntrain_set(train_df_mini, train_01_val_23=train_01_val_23)
+#         df_cnn_preds_end_01, df_cnn_preds_side_01 = pred_by_cnn(
+#             train_df_mini, tr_tracking, tr_helmets, tr_video_metadata, val_set, model, preprocessor, is_train_dataset=True)
 
-        os.makedirs(cnn_pred_path, exist_ok=True)
-        df_cnn_preds_end_01.to_csv(os.path.join(cnn_pred_path, "fold01_cnn_pred_end.csv"), index=False)
-        df_cnn_preds_side_01.to_csv(os.path.join(cnn_pred_path, "fold01_cnn_pred_side.csv"), index=False)
-        df_cnn_preds_end_23.to_csv(os.path.join(cnn_pred_path, "fold23_cnn_pred_end.csv"), index=False)
-        df_cnn_preds_side_23.to_csv(os.path.join(cnn_pred_path, "fold23_cnn_pred_side.csv"), index=False)
+#         train_01_val_23 = True
+#         model, preprocessor, val_set = get_foldcnntrain_set(train_df_mini, train_01_val_23=train_01_val_23)
+#         df_cnn_preds_end_23, df_cnn_preds_side_23 = pred_by_cnn(
+#             train_df_mini, tr_tracking, tr_helmets, tr_video_metadata, val_set, model, preprocessor, is_train_dataset=True)
 
-    df_side = pd.concat([df_cnn_preds_side_01, df_cnn_preds_side_23], axis=0)
-    df_end = pd.concat([df_cnn_preds_end_01, df_cnn_preds_end_23], axis=0)
+#         os.makedirs(cnn_pred_path, exist_ok=True)
+#         df_cnn_preds_end_01.to_csv(os.path.join(cnn_pred_path, "fold01_cnn_pred_end.csv"), index=False)
+#         df_cnn_preds_side_01.to_csv(os.path.join(cnn_pred_path, "fold01_cnn_pred_side.csv"), index=False)
+#         df_cnn_preds_end_23.to_csv(os.path.join(cnn_pred_path, "fold23_cnn_pred_end.csv"), index=False)
+#         df_cnn_preds_side_23.to_csv(os.path.join(cnn_pred_path, "fold23_cnn_pred_side.csv"), index=False)
 
-    # df_side = df_cnn_preds_side_01
-    # df_end = df_cnn_preds_end_01
+#     df_side = pd.concat([df_cnn_preds_side_01, df_cnn_preds_side_23], axis=0)
+#     df_end = pd.concat([df_cnn_preds_end_01, df_cnn_preds_end_23], axis=0)
 
-    df_end['nfl_player_id_2'] = df_end['nfl_player_id_2'].replace(0, ground_id).astype(int)
-    df_side['nfl_player_id_2'] = df_side['nfl_player_id_2'].replace(0, ground_id).astype(int)
+#     # df_side = df_cnn_preds_side_01
+#     # df_end = df_cnn_preds_end_01
 
-    return df_side, df_end
+#     df_end['nfl_player_id_2'] = df_end['nfl_player_id_2'].replace(0, ground_id).astype(int)
+#     df_side['nfl_player_id_2'] = df_side['nfl_player_id_2'].replace(0, ground_id).astype(int)
+
+#     return df_side, df_end
 
 
 def cnn_features_test(train_df, tr_tracking, tr_helmets, tr_video_metadata, ):
@@ -619,13 +637,20 @@ def cnn_features_test(train_df, tr_tracking, tr_helmets, tr_video_metadata, ):
     game_plays = list(train_df_mini["game_play"].unique())
     # べた書き
     model_01, preprocessor = load_model(
-        train_df, "../input/mfl2cnnkmat1225/model/weights/ex000_contdet_run022_fold01train_ground_othermask/final_weights.h5")
+        train_df,
+        "../input/mfl2cnnkmat0108/model/weights/ex000_contdet_run036_fold01train_72crop6cbr_concat_distance/final_weights.h5",
+        "../input/mfl2cnnkmat0108/model/weights/map_model_final_weights.h5")
     model_23, preprocessor = load_model(
-        train_df, "../input/mfl2cnnkmat1225/model/weights/ex000_contdet_run022_fold23train_ground_othermask/final_weights.h5")
+        train_df,
+        "../input/mfl2cnnkmat0108/model/weights/ex000_contdet_run036_fold23train_72crop6cbr_concat_distance/final_weights.h5",
+        "../input/mfl2cnnkmat0108/model/weights/map_model_final_weights.h5")
     # model_01, preprocessor, _ = get_foldcnntrain_set(train_df, train_01_val_23=True)
     # model_23, preprocessor, _ = get_foldcnntrain_set(train_df, train_01_val_23=False)
-    model = CNNEnsembler([model_01, model_23], num_output_items=2)
+    model = CNNEnsembler([model_01, model_23], num_output_items=3)
     df_end, df_side = pred_by_cnn(train_df_mini, tr_tracking, tr_helmets, tr_video_metadata, game_plays, model, preprocessor, is_train_dataset=False)
+
+    df_side = postprocess_cnn_all_frame_outputs(df_side)
+    df_end = postprocess_cnn_all_frame_outputs(df_end)
 
     df_end['nfl_player_id_2'] = df_end['nfl_player_id_2'].replace(0, ground_id).astype(int)
     df_side['nfl_player_id_2'] = df_side['nfl_player_id_2'].replace(0, ground_id).astype(int)
@@ -636,7 +661,7 @@ if __name__ == "__main__":
     phase = 'test'
 
     cfg = Config(
-        EXP_NAME='exp007_remove_hard_example_large_camaro_kmat_cnn_feats_p2p_interpolate',
+        EXP_NAME='kmat0108',
         PRETRAINED_MODEL_PATH='./',
         MODEL_SIZE=ModelSize.LARGE)
 
@@ -670,5 +695,5 @@ if __name__ == "__main__":
                           parse_dates=["start_time", "end_time", "snap_time"])
 
     df_side, df_end = cnn_features_test(test_df, te_tracking, te_helmets, te_meta)
-    df_side.to_csv('kmat_side_df.csv', index=False)
-    df_end.to_csv('kmat_end_df.csv', index=False)
+    df_side.to_csv('kmat0108_side_df.csv', index=False)
+    df_end.to_csv('kmat0108_end_df.csv', index=False)

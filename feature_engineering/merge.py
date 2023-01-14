@@ -35,6 +35,17 @@ def make_features(df, tracking, regist, df_args=None):
         feature_df = add_basic_features(feature_df)
         feature_df = add_cnn_features(feature_df, *df_args)
         feature_df = add_p2p_matching_features(feature_df, regist)
+
+        feature_df = interpolate_features(
+            feature_df,
+            window_size=5,
+            columns_to_roll=[
+                'camaro_pred',
+                'cnn_pred_Sideline',
+                'cnn_pred_Endzone',
+                'x_rel_position_offset_on_img_End',
+                'y_rel_position_offset_on_img_Side'])
+
         feature_df = interpolate_features(
             feature_df,
             window_size=11,
@@ -44,6 +55,17 @@ def make_features(df, tracking, regist, df_args=None):
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'])
+
+        feature_df = interpolate_features(
+            feature_df,
+            window_size=21,
+            columns_to_roll=[
+                'camaro_pred',
+                'cnn_pred_Sideline',
+                'cnn_pred_Endzone',
+                'x_rel_position_offset_on_img_End',
+                'y_rel_position_offset_on_img_Side'])
+
         feature_df = add_cnn_shift_diff_feature(feature_df, columns=[
             'camaro_pred',
             'cnn_pred_Sideline',

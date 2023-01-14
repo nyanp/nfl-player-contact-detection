@@ -197,7 +197,7 @@ class OpticalFlowNet():
         self.model.freeze_layers()
         self.model.trainable = False
         predict_bothflow = True
-        batch_size = 10
+        batch_size = 4
         
         model_tf_func = tf.function(lambda x: self.model.quick_inference(x, training=False, both_flow=predict_bothflow),
                                     )
@@ -371,7 +371,7 @@ def save_validation_predicts(weight_file, input_shape=(200,480, 3),):
     side_path = [side_path[idx] for idx in shuffle_indices]
     print("ALL", len(end_path), len(side_path))
     #path = os.path.join(DATA_PATH, "58168_003392_Endzone/")
-    train_files = load_dataset(end_path[:120] + side_path[:120], raft_model=True)
+    train_files = load_dataset(end_path[:240] + side_path[:240], raft_model=True)
     val_files = load_dataset(end_path[-24:] + side_path[-24:], raft_model=True)
     
     #np.random.shuffle(train_files)
@@ -392,7 +392,7 @@ def save_validation_predicts(weight_file, input_shape=(200,480, 3),):
     net = OpticalFlowNet(**model_params)
     net.predict_and_save_flow(train_files,
                               original_folder="train_img",
-                              save_folder="train_flow_img")
+                              save_folder="train_flow_img_512x896")
 
 
 if __name__=="__main__":
@@ -408,19 +408,19 @@ if __name__=="__main__":
     os.makedirs(WEIGHT_DIR, exist_ok=True)
 
     DATA_PATH = os.path.join(TRAIN_DIR, "train_img/")
-    run_train = True
+    run_train = False
     if run_train:
         OCC_MASK_EPOCH = 20
-        save_path = os.path.join(SETTING["WEIGHT_DIR"], "ex001_raft_run002_512x896/")
+        save_path = os.path.join(SETTING["WEIGHT_DIR"], "ex001_raft_run003_512x896/")
         run_training_main(epochs=30, batch_size=3,
                           ##input_shape=(360,544,3), 
                           input_shape=(512, 896, 3),
                           save_path=save_path,
-                          initial_weight=None
+                          initial_weight="model/weights/ex001_raft_run003_512x896/08.hdf5"
                           )
     else:
-        save_validation_predicts(weight_file=os.path.join(SETTING["WEIGHT_DIR"], "ex001_raft_run000_360x544/final_weights.h5"), 
-                                 input_shape=(360,544,3),)
+        save_validation_predicts(weight_file=os.path.join(SETTING["WEIGHT_DIR"], "ex001_raft_run002_512x896/final_weights.h5"), 
+                                 input_shape=(512, 896,3),)
         
 
     

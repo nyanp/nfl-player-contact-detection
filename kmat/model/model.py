@@ -13,7 +13,7 @@ import math
 import tensorflow as tf
 #import tensorflow_addons as tfa
 from tensorflow.keras import backend as K
-from tensorflow.keras.layers import Dense, Dropout, Reshape, Conv2D, Conv2DTranspose, BatchNormalization, Activation, GlobalAveragePooling2D, Lambda, Input, Concatenate, Add, UpSampling2D, LeakyReLU, ZeroPadding2D,Multiply, DepthwiseConv2D, MaxPooling2D, LayerNormalization
+from tensorflow.keras.layers import Dense, Dropout, Reshape, Conv3D, Conv2D, Conv1D, Conv2DTranspose, BatchNormalization, Activation, GlobalAveragePooling2D, AveragePooling2D, Lambda, Input, Concatenate, Add, UpSampling2D, LeakyReLU, ZeroPadding2D,Multiply, DepthwiseConv2D, MaxPooling2D, LayerNormalization
 from tensorflow.keras.models import Model
 
 from .efficientnetv2 import effnetv2_model
@@ -427,6 +427,204 @@ def contact_btw_selected_pairs(inputs, reduced=False):
     else:
         return contact_btw_players
 
+def contact_btw_selected_pairs_depth(inputs, reduced=False):
+    """
+    TODO
+    ★同じピクセルでA-Bはコンタクト、B-Cはコンタクトのときに、A-Cはコンタクトでない場合もある。この場合を表現できるかな？
+    ★コンタクトが全１でも成立しちゃうな。まぁええけど正則化いれてマスクを最小限出すようにしてもいいかも？。
+    
+    contact_map:
+        [batch, height, width, 1]
+        it include all contact event
+    instance_masks:
+        [batch, num_box+1, height, width, 1]
+        initial box index([:,0,:,:,:]) is ground mask. others [:,1:,:,:,:] are players' mask 
+    pairs:
+        [batch, num_pairs, 2]
+        values are index of player(bbox). 0 <= val < num_player+1.
+    reduced:
+        bool. 
+        if True:
+            return [batch, num_pairs]
+        else:
+            return [batch, num_pairs, height, width, 1]
+        the latter can be helpful to find the contact point. 
+        (useful for second stage & benefit for user)
+    
+    contact_btw_pairs:
+        [batch, num_pairs] or [batch, num_pairs, height, width, 1]
+    """
+    depth_minmax, pairs = inputs
+    depth_minmax_1 = tf.gather(depth_minmax, pairs[:,:,0], axis=1, batch_dims=1)
+    depth_minmax_2 = tf.gather(depth_minmax, pairs[:,:,1], axis=1, batch_dims=1)
+    
+    depth_minmax_1_invalid = tf.reduce_all(depth_minmax_1==0, axis=-1, keepdims=True)
+    depth_minmax_2_invalid = tf.reduce_all(depth_minmax_2==0, axis=-1, keepdims=True)
+    depth_minmax_invalid = tf.cast(tf.logical_or(depth_minmax_1_invalid, depth_minmax_2_invalid), tf.float32)
+    # originalはひとつだけ
+    # contact_btw_players = contact_map[:,tf.newaxis,:,:,:] * player_mask_1 * player_mask_2
+    is_ground = tf.cast(pairs[:,:,1]==0, tf.float32)[:,:,tf.newaxis,tf.newaxis,tf.newaxis] # ground
+    #positive_value if penetrated
+    penetration_btw_players = tf.minimum(depth_minmax_1[...,1:2] - depth_minmax_2[...,:1], 
+                                         depth_minmax_2[...,1:2] - depth_minmax_1[...,:1]) - depth_minmax_invalid * 1e7
+    penetration_btw_players = penetration_btw_players * (1.-is_ground)
+    if reduced:
+        return tf.math.reduce_max(penetration_btw_players, axis=[2,3,4])
+    else:
+        return penetration_btw_players
+
+def extract_peak_features(inputs, num_ch=32):
+    """
+    batch, num_pair, h, w, 1
+    batch, num_player+1, h, w, features
+    batch, num_pair, 2
+    """
+    pairs_contact, player_features, pairs = inputs
+    batch, num_pair, h, w, _ = tf.unstack(tf.shape(pairs_contact))
+    batch, num_player, h, w, num_features = tf.unstack(tf.shape(player_features))
+    player_features_1 = tf.gather(player_features, pairs[:,:,0], axis=1, batch_dims=1)
+    player_features_2 = tf.gather(player_features, pairs[:,:,1], axis=1, batch_dims=1)
+    
+    argmax = tf.argmax(tf.reshape(pairs_contact, [batch, num_pair, h*w, 1]), axis=2)
+    player_features_1 = tf.reshape(player_features_1, [batch, num_pair, h*w, num_features])
+    player_features_2 = tf.reshape(player_features_2, [batch, num_pair, h*w, num_features])
+    player_features_1 = tf.gather(player_features_1, argmax, batch_dims=2)
+    player_features_2 = tf.gather(player_features_2, argmax, batch_dims=2)
+    
+    features = tf.concat([player_features_1, player_features_2], axis=-1)
+    #features = tf.reshape(features, [batch, num_pair, 2*num_ch])
+    #features = tf.reshape(player_features_1-player_features_2, [batch, num_pair, num_ch])
+    return features
+                       
+def extract_xyd_features(inputs):
+    """
+    TODO
+    ★同じピクセルでA-Bはコンタクト、B-Cはコンタクトのときに、A-Cはコンタクトでない場合もある。この場合を表現できるかな？
+    ★コンタクトが全１でも成立しちゃうな。まぁええけど正則化いれてマスクを最小限出すようにしてもいいかも？。
+    
+    contact_map:
+        [batch, height, width, 1]
+        it include all contact event
+    instance_masks:
+        [batch, num_box+1, height, width, 1]
+        initial box index([:,0,:,:,:]) is ground mask. others [:,1:,:,:,:] are players' mask 
+    pairs:
+        [batch, num_pairs, 2]
+        values are index of player(bbox). 0 <= val < num_player+1.
+    reduced:
+        bool. 
+        if True:
+            return [batch, num_pairs]
+        else:
+            return [batch, num_pairs, height, width, 1]
+        the latter can be helpful to find the contact point. 
+        (useful for second stage & benefit for user)
+    
+    contact_btw_pairs:
+        [batch, num_pairs] or [batch, num_pairs, height, width, 1]
+    """
+    xy_pos, pairs = inputs
+    b, p, _ = tf.unstack(tf.shape(pairs))
+    xy_pos_1 = tf.gather(xy_pos, pairs[:,:,0], axis=1, batch_dims=1)
+    xy_pos_2 = tf.gather(xy_pos, pairs[:,:,1], axis=1, batch_dims=1)
+    xy_diff = xy_pos_1 - xy_pos_2
+    dist = tf.math.sqrt(tf.reduce_sum((xy_diff)**2, axis=-1, keepdims=True))
+    outputs = tf.concat([xy_diff, dist], axis=-1)
+    outputs = tf.reshape(outputs, [b,p,3])
+    return outputs
+
+def extract_pair_features_single(inputs, num_ch=3, only_1=False):
+    
+    features, pairs = inputs
+    b, p, _ = tf.unstack(tf.shape(pairs))
+    features_1 = tf.gather(features, pairs[:,:,0], axis=1, batch_dims=1)
+    features_2 = tf.gather(features, pairs[:,:,1], axis=1, batch_dims=1)
+    if only_1:
+        outputs = features_1
+        outputs = tf.reshape(outputs, [b,p,num_ch])
+    else:
+        outputs = tf.concat([features_1, features_2], axis=-1)
+        outputs = tf.reshape(outputs, [b,p,num_ch*2])
+    return outputs
+
+
+class PenetrationLayer(tf.keras.layers.Layer):
+    def __init__(self, max_thickness):
+        super(PenetrationLayer, self).__init__()
+        self.max_thickness = max_thickness
+
+    def build(self, input_shape):
+        self.kernel = self.add_weight("kernel",
+                                  shape=())
+        self.bias = self.add_weight("bias",
+                                  shape=())
+
+    def call(self, inputs):
+        #bias = tf.clip_by_value(self.bias, -0.5, 0.5)
+        kernel = 10**tf.clip_by_value(self.kernel, 0.0, 0.5)
+        return tf.sigmoid(0.1 + kernel * tf.clip_by_value(inputs, -self.max_thickness*5, self.max_thickness) / self.max_thickness)
+
+class MyDenseLayer(tf.keras.layers.Layer):
+  def __init__(self, num_outputs, activation="relu", *args, **kargs):
+    super(MyDenseLayer, self).__init__(*args, **kargs)
+    self.num_outputs = num_outputs
+    self.activation_name = activation
+
+  def build(self, input_shape):
+    self.kernel = self.add_weight("kernel",
+                                  initializer="ones",#tf.keras.initializers.GlorotNormal(),
+                                  shape=[int(input_shape[-1]),
+                                         self.num_outputs])
+    self.bias = self.add_weight("bias",
+                                #initializer = tf.keras.initializers.Zeros(),
+                                #  initializer=tf.keras.initializers.GlorotNormal(),
+                                  shape=[self.num_outputs])
+    self.activation = tf.sigmoid if self.activation_name=="sigmoid" else tf.nn.relu
+
+  def call(self, inputs):
+    return self.activation(tf.matmul(inputs, self.kernel)+self.bias)
+
+def contact_btw_selected_pairs_logit(inputs, reduced=False):
+    """
+    TODO
+    ★同じピクセルでA-Bはコンタクト、B-Cはコンタクトのときに、A-Cはコンタクトでない場合もある。この場合を表現できるかな？
+    ★コンタクトが全１でも成立しちゃうな。まぁええけど正則化いれてマスクを最小限出すようにしてもいいかも？。
+    
+    contact_map:
+        [batch, height, width, 1]
+        it include all contact event
+    instance_masks:
+        [batch, num_box+1, height, width, num_feature]
+        initial box index([:,0,:,:,:]) is ground mask. others [:,1:,:,:,:] are players' mask 
+    pairs:
+        [batch, num_pairs, 2]
+        values are index of player(bbox). 0 <= val < num_player+1.
+    reduced:
+        bool. 
+        if True:
+            return [batch, num_pairs]
+        else:
+            return [batch, num_pairs, height, width, 1]
+        the latter can be helpful to find the contact point. 
+        (useful for second stage & benefit for user)
+    
+    contact_btw_pairs:
+        [batch, num_pairs] or [batch, num_pairs, height, width, 1]
+    """
+    contact_map, instance_masks, pairs = inputs
+    player_mask_1 = tf.gather(instance_masks, pairs[:,:,0], axis=1, batch_dims=1)
+    player_mask_2 = tf.gather(instance_masks, pairs[:,:,1], axis=1, batch_dims=1)
+    # originalはひとつだけ
+    # contact_btw_players = contact_map[:,tf.newaxis,:,:,:] * player_mask_1 * player_mask_2
+    is_ground = tf.cast(pairs[:,:,1]==0, tf.float32)[:,:,tf.newaxis,tf.newaxis,tf.newaxis] # ground
+    cross_section = tf.cast(tf.reduce_all(tf.concat([player_mask_1, player_mask_2], axis=-1)!=0., axis=-1, keepdims=True), tf.float32) 
+    contact_btw_players = contact_map[:,tf.newaxis,:,:,:] * tf.math.sigmoid(tf.reduce_sum(player_mask_1 * player_mask_2, axis=-1, keepdims=True)) * cross_section
+    contact_w_ground = tf.math.sigmoid(tf.reduce_sum(player_mask_1 * player_mask_2, axis=-1, keepdims=True)) * cross_section
+    contact_btw_players = contact_btw_players * (1.-is_ground) + contact_w_ground * is_ground
+    if reduced:
+        return tf.math.reduce_max(contact_btw_players, axis=[2,3,4])
+    else:
+        return contact_btw_players
 
 def contact_btw_selected_pairs_each(inputs, reduced=False):
     """
@@ -596,6 +794,44 @@ def contact_btw_selected_pairs_nomask(inputs, reduced=False):
     contact_btw_players = tf.concat([player_mask_1, player_mask_2], axis=-1)
     return contact_btw_players
 
+def contact_btw_selected_pairs_feature_only_exist(inputs, reduced=False):
+    """
+    TODO
+    ★同じピクセルでA-Bはコンタクト、B-Cはコンタクトのときに、A-Cはコンタクトでない場合もある。この場合を表現できるかな？
+    ★コンタクトが全１でも成立しちゃうな。まぁええけど正則化いれてマスクを最小限出すようにしてもいいかも？。
+    
+    contact_map:
+        [batch, height, width, 1]
+        it include all contact event
+    instance_masks:
+        [batch, num_box+1, height, width, 1]
+        initial box index([:,0,:,:,:]) is ground mask. others [:,1:,:,:,:] are players' mask 
+    pairs:
+        [batch, num_pairs, 2]
+        values are index of player(bbox). 0 <= val < num_player+1.
+    reduced:
+        bool. 
+        if True:
+            return [batch, num_pairs]
+        else:
+            return [batch, num_pairs, height, width, 1]
+        the latter can be helpful to find the contact point. 
+        (useful for second stage & benefit for user)
+    
+    contact_btw_pairs:
+        [batch, num_pairs] or [batch, num_pairs, height, width, 1]
+    """
+    instance_masks, pairs = inputs
+    player_1 = tf.gather(instance_masks, pairs[:,:,0], axis=1, batch_dims=1)
+    player_1_feature = player_1[...,:-1]
+    player_1_mask = player_1[...,-1:]
+    player_2 = tf.gather(instance_masks, pairs[:,:,1], axis=1, batch_dims=1)
+    player_2_feature = player_2[...,:-1]
+    player_2_mask = player_2[...,-1:]
+    player_12_mask = player_1_mask * player_2_mask
+    feature_btw_players = tf.concat([player_1_feature, player_2_feature], axis=-1)
+    return feature_btw_players, player_12_mask
+
 def contact_btw_selected_pairs_nomask_v2(inputs, reduced=False):
     """
     TODO
@@ -683,14 +919,654 @@ def matthews_correlation_best(y_true, y_pred):
     return best_score
     
     
+def average_box_size(inputs):
+    sizes = tf.math.sqrt((inputs[:,:,2] - inputs[:,:,0]) * (inputs[:,:,3] - inputs[:,:,1]))
+    sizes_mask = tf.cast(sizes > 1e-7, tf.float32)
+    average_size = tf.reduce_sum(sizes, axis=1, keepdims=True) / (tf.reduce_sum(sizes_mask, axis=1, keepdims=True)+1e-7)
+    return average_size
 
+def map_test(map_model, input_rgb, input_boxes):
+    averagesize = average_box_size(input_boxes)
+    out_p, out_map = map_model([input_rgb, input_boxes, averagesize])
+    return out_p, out_map
+
+def map_inference_func_wrapper(map_model, include_resize=False, input_shape = (512, 896, 3)):
+    
+    @tf.function
+    def map_test(input_rgb, input_boxes):
+        if include_resize:
+            input_rgb = tf.image.resize(input_rgb, (input_shape[0], input_shape[1]), method="bilinear")
+        averagesize = average_box_size(input_boxes)
+        out_p, out_map = map_model([input_rgb, input_boxes, averagesize])
+        return out_p, out_map
+    
+    return map_test
+    
+    
 def build_model(input_shape=(256,256,3),
              backbone="effv2s", 
              minimum_stride=2, 
              max_stride = 64,
              is_train=True,
              num_boxes = None,
-             from_scratch=False):
+             from_scratch=False,
+             return_feature_ext=False,
+             size="SM",
+             map_model=None):
+    """
+    model inputs:
+        - normalized rgb(d)
+        - boxes(normalized coordinates to show box location. top,left,bottom,right)
+    """
+    input_rgb = Input(input_shape, name="input_rgb")#256,256,3
+    input_boxes = Input(shape=[num_boxes,4], name="input_boxes")
+    input_pairs = Input(shape=[None,2], name="input_pairs", dtype=tf.int32)
+    enc_in = input_rgb
+    if map_model is not None:
+        averagesize = Lambda(average_box_size)(input_boxes)
+        
+        out_map = map_model([input_rgb, input_boxes, averagesize])[1]
+        out_map = UpSampling2D(4)(out_map)
+        enc_in = Lambda(lambda x: tf.concat(x, axis=-1))([input_rgb, out_map])
+    
+    model_names = {"effv2s":"s", "effv2m":"m", "effv2l":"l", "effv2xl":"xl"}
+    if backbone not in model_names.keys():
+        raise Exception("check backbone name")
+    x, skip_connections = effv2_encoder(enc_in, is_train, from_scratch, model_name = model_names[backbone])
+
+    use_coord_conv = False
+
+    if use_coord_conv:
+        print("use coords")
+        
+        x = Lambda(add_coords, name="add_coords")(x)
+        x = Lambda(add_high_freq_coords, name="add_high_freq_coords")(x)
+    
+    outs = decoder(x, skip_connections, use_batchnorm=True, 
+                   num_channels=32, max_stride=max_stride, minimum_stride=minimum_stride)
+    decoder_out = outs[-1]
+    x = outs[-1]
+    contact_map = Conv2D(1, activation="sigmoid", kernel_size=3, strides=1, 
+                        padding="same", 
+                        name="contact_map",)(x)
+    ground_mask = Conv2D(1, activation="sigmoid", kernel_size=3, strides=1, 
+                        padding="same", 
+                        name="ground_mask",)(x)
+    
+    if size=="SS":
+        roi_size = 72
+        num_cbr = 3
+    elif size=="SM":
+        roi_size = 72
+        num_cbr = 6
+    elif size=="MM":
+        roi_size = 108
+        num_cbr = 6
+        
+    num_feature_ch = 24
+    features = Conv2D(num_feature_ch, activation="relu", kernel_size=3, strides=1, padding="same", 
+                          name="rgb_features")(x)
+    feature_w_mask = Lambda(add_bbox_img, arguments={"only_overlap": False}, 
+                            name="add_box_mask")([features, input_boxes])
+    feature_w_mask = Lambda(larger_crop_resize_layer, name="wide_crop_resize",
+                   arguments={"num_ch": num_feature_ch+1, 
+                              "crop_size": [roi_size,roi_size], 
+                              "add_crop_mask": True,
+                              "wide_mode": True})([feature_w_mask, input_boxes]) 
+    feature_w_mask = Lambda(get_dev_overlap,
+                                arguments={"multi_mask": True},
+                                name="dev_mask")(feature_w_mask)
+    # ch = num_feature_ch + 2(one is self_mask, the other is other_mask)
+    mode="direct_mask"
+    if mode=="direct_mask":
+        #x_0 = feature_w_mask
+        #x_1 = AveragePooling2D(2)(x_0)
+        #x_2 = AveragePooling2D(2)(x_1)
+        for layer_idx in range(num_cbr):#7x3
+            feature_w_mask = cbr(feature_w_mask, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+            #x_0 = cbr(x_0, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+            #x_1 = cbr(x_1, 32, kernel=7, stride=1, name=f"player_cbrs{layer_idx}")
+            #x_2 = cbr(x_2, 32, kernel=7, stride=1, name=f"player_cbrss{layer_idx}")
+        
+        #x_1 = UpSampling2D(2)(x_1)
+        #x_2 = UpSampling2D(4)(x_2)
+        #feature_w_mask = Lambda(lambda x: tf.concat(x, axis=-1))([x_0,x_1,x_2])
+        
+        
+        #feature_w_mask = cbr(feature_w_mask, 48, kernel=7, stride=1, name="player_cbr0")
+        #for layer_idx in range(3):
+        #    feature_w_mask = resblock(feature_w_mask, 48, kernel=7, stride=1, name=f"player_resblock{layer_idx}", use_se=False)
+        
+        #"""
+        player_mask = Conv2D(1, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(feature_w_mask)
+        # resize back to original scale, and reshape from [batch*num_box, h, w, 1] to [batch, num_box, h, w, 1]
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                   arguments={"num_ch": 1, 
+                              "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        
+        """#12/20一時的に変更。裏表オクルージョンモデル。
+        player_mask = Conv2D(2, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(feature_w_mask)
+        # resize back to original scale, and reshape from [batch*num_box, h, w, 1] to [batch, num_box, h, w, 1]
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                   arguments={"num_ch": 2, 
+                              "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        
+        # is_contactを弱めに学習してもいいのかもしれない？？
+        # もしくは共通のグランドマスクを使う。
+        #"""
+        
+        
+    elif mode=="ch_attention":
+        x = feature_w_mask
+        #for layer_idx in range(3):
+        #    x = cbr(x, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+        x = cbr(x, 48, kernel=7, stride=1, name="player_cbr0")
+        for layer_idx in range(3):#5,7
+            x = resblock(x, 32, kernel=7, stride=1, name=f"player_resblock{layer_idx}", use_se=False)
+        
+        
+        x = GlobalAveragePooling2D()(x)
+        attention_weight = Dense(num_feature_ch, activation="sigmoid", name="ch_attention")(x)
+        attention_feature = Lambda(lambda x: x[0][...,:num_feature_ch] * tf.reshape(x[1], [-1,1,1,num_feature_ch]), name="mul_attention")([feature_w_mask, attention_weight])
+        player_mask = Conv2D(1, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(attention_feature)
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                                              arguments={"num_ch": 1, 
+                                                         "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        #Reshape((1,1,num_feature_ch), name="ch_attention_reshape")(attention_weight)
+        #x_out = Multiply()([features, attention_weight])
+        
+        
+    #"""
+    # concat masks, [batch, num_player+1(ground), h, w, 1]
+    all_masks = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([ground_mask, player_mask])
+    
+    pairs_contact = Lambda(contact_btw_selected_pairs, name="contact_btw_selected_pairs",
+                   #arguments={"num_ch": 1, 
+                   #           "wide_mode": True},
+                   )([contact_map, all_masks, input_pairs]) 
+    
+    """#12/20一時的に変更。uraomoteモデル
+    #all_masks = Lambda(lambda x: tf.concat([x[...,0:1], x[...,1:2]], axis=1))(player_mask) # concat ground and player_mask at 2nd axis
+    all_masks = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([ground_mask, player_mask])
+    pairs_contact = Lambda(contact_btw_selected_pairs_uraomote, name="contact_btw_selected_pairs",
+                   #arguments={"num_ch": 1, 
+                   #           "wide_mode": True},
+                   )([contact_map, all_masks, input_pairs]) 
+    
+    #pairs_contact = Lambda(contact_btw_selected_pairs_v2, name="contact_btw_selected_pairs",
+    #               #arguments={"num_ch": 1, 
+    #               #           "wide_mode": True},
+    #               )([contact_map, all_masks, input_pairs]) 
+    
+    #"""
+    
+    
+    
+    # ペア予測がないと、ABC三選手が画像上重なる場合に、A-B, B-Cのみが干渉するケースに対応できないかも…。
+    # マルチなロスにする方が自然かな…。この特徴が強すぎると詰むかも？
+    add_pairwise_mask = False
+    if add_pairwise_mask:
+        num_pair_feature = 4
+        feature_g = Conv2D(num_pair_feature, activation="relu", kernel_size=3, strides=1, padding="same", 
+                              name="features_g")(features)
+        feature_p = Conv2D(num_pair_feature, activation="relu", kernel_size=3, strides=1, padding="same", 
+                              name="features_p")(feature_w_mask)
+        feature_p = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize_features",
+                                              arguments={"num_ch": num_pair_feature, 
+                                                         "wide_mode": True})([feature_p, input_boxes, ground_mask]) 
+        features_gp = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([feature_g, feature_p])
+        pairs_feature = Lambda(contact_btw_selected_pairs_nomask, name="feature_btw_selected_pairs",
+                       )([features_gp, input_pairs]) 
+        pairwise_prediction = Conv2D(1, activation="sigmoid", kernel_size=1, strides=1, padding="same", 
+                              name="pairwise_prediction")(pairs_feature)
+        pairs_contact = Lambda(lambda x: x[0] * x[1], name="multiply_final_preds")([pairs_contact, pairwise_prediction])
+    
+    
+    
+    
+    pairs_contact_reduced = Lambda(lambda x: tf.math.reduce_max(x, axis=[2,3,4]), name="output_contact_label")(pairs_contact)
+    
+    inputs = [input_rgb, input_boxes, input_pairs]
+    outputs = [pairs_contact_reduced, contact_map]
+    losses = {"output_contact_label": bce_loss,#"z_error": weighted_dummy_loss,
+              "contact_map": l2_regularization,
+              #"zoom_dev_abs": weighted_dummy_loss
+              }
+    loss_weights = {"output_contact_label": 1.,#{"z_error": 1e-4,
+                    "contact_map": 0.01,
+                    #"zoom_dev_abs": 0.1*4
+                    }
+    metrics = {"output_contact_label": [matthews_correlation_best]}
+    
+    
+    
+    
+    model = Model(inputs, outputs)
+    
+    sub_model = Model(inputs, [pairs_contact, pairs_contact_reduced])
+    if not return_feature_ext:
+        return model, sub_model, losses, loss_weights, metrics
+    else:
+        model_feature_ext = Model([input_rgb], [decoder_out])
+        return model, sub_model, model_feature_ext
+
+def fill_zero_with_average(inputs):
+    b, n = tf.unstack(tf.shape(inputs))[:2]
+    is_zero = tf.cast(inputs==0, tf.float32)
+    average = tf.reduce_sum(inputs * is_zero) / (tf.reduce_sum(is_zero) + 1e-7)
+    outputs = inputs * (1. - is_zero) + is_zero * average
+    return tf.reshape(outputs, [b,n,1])
+
+def player_coords_feature_branch(input_boxes, input_player_positions, out_ch=16):
+    
+    def concat_features(inputs):
+        input_boxes, input_player_positions = inputs
+        batch, num_player = tf.unstack(tf.shape(input_boxes))[:2]
+        box_pos_x = (input_boxes[:,:,1:2] + input_boxes[:,:,3:4])/2
+        box_pos_y = (input_boxes[:,:,0:1] + input_boxes[:,:,2:3])/2
+        box_w = -input_boxes[:,:,1:2] + input_boxes[:,:,3:4]
+        box_h = -input_boxes[:,:,0:1] + input_boxes[:,:,2:3]
+        box_pos_x_std = tf.math.reduce_std(box_pos_x, axis=1, keepdims=True) + 1e-7
+        box_pos_y_std = tf.math.reduce_std(box_pos_y, axis=1, keepdims=True) + 1e-7
+        
+        positions_adjust = input_player_positions - tf.reduce_mean(input_player_positions, axis=1, keepdims=True)
+        map_pos_x = positions_adjust[:,:,:1] 
+        map_pos_y = positions_adjust[:,:,1:2]
+        map_pos_x_std = tf.math.reduce_std(map_pos_x, axis=1, keepdims=True) + 1e-7
+        map_pos_y_std = tf.math.reduce_std(map_pos_y, axis=1, keepdims=True) + 1e-7
+        
+        box_pos_x_adjust = (box_pos_x - tf.reduce_mean(box_pos_x, axis=1, keepdims=True)) * map_pos_x_std / box_pos_x_std 
+        box_pos_y_adjust = (box_pos_y - tf.reduce_mean(box_pos_y, axis=1, keepdims=True)) * map_pos_y_std / box_pos_y_std 
+        
+        map_box_pos_dx = map_pos_x - box_pos_x_adjust
+        map_box_pos_dy = map_pos_y - box_pos_y_adjust
+        
+        map_pos_x_std_tile = tf.tile(map_pos_x_std, [1, num_player, 1])
+        map_pos_y_std_tile = tf.tile(map_pos_y_std, [1, num_player, 1])
+        box_pos_x_std_tile = tf.tile(box_pos_x_std, [1, num_player, 1])
+        box_pos_y_std_tile = tf.tile(box_pos_y_std, [1, num_player, 1])
+        
+        features = [box_pos_x, box_pos_y, box_w, box_h,
+                    box_pos_x_std_tile, box_pos_y_std_tile,
+                    map_pos_x, map_pos_y, 
+                    map_pos_x_std_tile, map_pos_y_std_tile,
+                    box_pos_x_adjust, box_pos_y_adjust,
+                    map_box_pos_dx, map_box_pos_dy,
+                    ]
+        features = tf.concat(features, axis=-1)
+        return features
+    
+    # DENSEしてそのあとまたアグリゲーション取るほうがいい気もする TODO
+    
+    
+    
+    
+    
+    x = Lambda(concat_features)([input_boxes, input_player_positions])
+    x = Dense(128, activation="relu", name="coods_branch_dense_0")(x)
+    x = Dense(out_ch, activation="relu", name="coods_branch_dense_1")(x)
+    return x
+    
+    
+
+def build_model_explicit_distance(input_shape=(256,256,3),
+             backbone="effv2s", 
+             minimum_stride=2, 
+             max_stride = 64,
+             is_train=True,
+             num_boxes = None,
+             from_scratch=False,
+             return_feature_ext=False,
+             size="SS",
+             map_model=None):
+    """
+    TODO 寸法大丈夫かな？？フルスケールでまわるか？
+    対地面の場合、扱いがムズイかも。。
+    ボクセル的な奥行きを出力して三次元奥行きで交わり具合を出すのもいい気がする。
+    
+    model inputs:
+        - normalized rgb(d)
+        - boxes(normalized coordinates to show box location. top,left,bottom,right)
+    """
+    input_rgb = Input(input_shape, name="input_rgb")#256,256,3
+    input_boxes = Input(shape=[num_boxes,4], name="input_boxes")
+    input_pairs = Input(shape=[None,2], name="input_pairs", dtype=tf.int32)
+    input_player_positions = Input(shape=[num_boxes,2], name="input_player_positions")
+    enc_in = input_rgb
+    """
+    if map_model is not None:
+        averagesize = Lambda(average_box_size)(input_boxes)
+        
+        player_pos, out_map = map_model([input_rgb, input_boxes, averagesize])
+        player_depth = Lambda(lambda x: x[...,1:])(player_pos) # [batch, num_p, 1]
+        depth = Lambda(lambda x: x[...,1:])(out_map)
+        depth = UpSampling2D(4)(depth)
+        enc_in = Lambda(lambda x: tf.concat(x, axis=-1))([input_rgb, depth])
+    """
+    
+    model_names = {"effv2s":"s", "effv2m":"m", "effv2l":"l", "effv2xl":"xl"}
+    if backbone not in model_names.keys():
+        raise Exception("check backbone name")
+    x, skip_connections = effv2_encoder(enc_in, is_train, from_scratch, model_name = model_names[backbone])
+
+    use_coord_conv = False
+
+    if use_coord_conv:
+        print("use coords")
+        
+        x = Lambda(add_coords, name="add_coords")(x)
+        x = Lambda(add_high_freq_coords, name="add_high_freq_coords")(x)
+    
+    outs = decoder(x, skip_connections, use_batchnorm=True, 
+                   num_channels=32, max_stride=max_stride, minimum_stride=minimum_stride)
+    decoder_out = outs[-1]
+    x = outs[-1]
+    contact_map = Conv2D(1, activation="sigmoid", kernel_size=3, strides=1, 
+                        padding="same", 
+                        name="contact_map",)(x)
+    ground_mask = Conv2D(1, activation="sigmoid", kernel_size=3, strides=1, 
+                        padding="same", 
+                        name="ground_mask",)(x)
+    
+    if size=="SS":
+        roi_size = 72
+        num_cbr = 3
+    elif size=="SM":
+        roi_size = 72
+        num_cbr = 6
+    elif size=="MM":
+        roi_size = 108
+        num_cbr = 6
+        
+    num_feature_ch = 24
+    features = Conv2D(num_feature_ch, activation="relu", kernel_size=3, strides=1, padding="same", 
+                          name="rgb_features")(x)
+    feature_w_mask = Lambda(add_bbox_img, arguments={"only_overlap": False}, 
+                            name="add_box_mask")([features, input_boxes])
+    feature_w_mask = Lambda(larger_crop_resize_layer, name="wide_crop_resize",
+                   arguments={"num_ch": num_feature_ch+1, 
+                              "crop_size": [roi_size,roi_size], 
+                              "add_crop_mask": True,
+                              "wide_mode": True})([feature_w_mask, input_boxes]) 
+    feature_w_mask = Lambda(get_dev_overlap,
+                                arguments={"multi_mask": True},
+                                name="dev_mask")(feature_w_mask)
+    # ch = num_feature_ch + 2(one is self_mask, the other is other_mask)
+    mode="direct_mask"
+    if mode=="direct_mask":
+        #x_0 = feature_w_mask
+        #x_1 = AveragePooling2D(2)(x_0)
+        #x_2 = AveragePooling2D(2)(x_1)
+        for layer_idx in range(num_cbr):#7x3
+            feature_w_mask = cbr(feature_w_mask, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+            #x_0 = cbr(x_0, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+            #x_1 = cbr(x_1, 32, kernel=7, stride=1, name=f"player_cbrs{layer_idx}")
+            #x_2 = cbr(x_2, 32, kernel=7, stride=1, name=f"player_cbrss{layer_idx}")
+        
+        #x_1 = UpSampling2D(2)(x_1)
+        #x_2 = UpSampling2D(4)(x_2)
+        #feature_w_mask = Lambda(lambda x: tf.concat(x, axis=-1))([x_0,x_1,x_2])
+        
+        
+        #feature_w_mask = cbr(feature_w_mask, 48, kernel=7, stride=1, name="player_cbr0")
+        #for layer_idx in range(3):
+        #    feature_w_mask = resblock(feature_w_mask, 48, kernel=7, stride=1, name=f"player_resblock{layer_idx}", use_se=False)
+        
+        #"""
+        # 近くても干渉していないときロスがでちゃう。どうする？
+        """
+        offset_scale = 0.025
+        thickness_scale = 0.025#/100
+        player_depth_offset = Conv2D(1, activation="tanh", kernel_size=7, strides=1, padding="same", 
+                           name="player_depth_offset")(feature_w_mask)
+        player_thickness = Conv2D(1, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_thickness")(feature_w_mask)
+        player_depth_min = Lambda(lambda x: x[0]*offset_scale - x[1]*thickness_scale + tf.reshape(x[2], [-1])[:,tf.newaxis,tf.newaxis,tf.newaxis])([player_depth_offset, player_thickness, player_depth])
+        player_depth_max = Lambda(lambda x: x[0]*offset_scale + x[1]*thickness_scale + tf.reshape(x[2], [-1])[:,tf.newaxis,tf.newaxis,tf.newaxis])([player_depth_offset, player_thickness, player_depth])
+        player_mask = Conv2D(1, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(feature_w_mask)
+        
+        player_mask_w_d = Lambda(lambda x: tf.concat(x, axis=-1))([player_mask, player_depth_min, player_depth_max])
+        # resize back to original scale, and reshape from [batch*num_box, h, w, 1] to [batch, num_box, h, w, 1]
+        player_mask_w_d = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                   arguments={"num_ch": 1+2, 
+                              "wide_mode": True})([player_mask_w_d, input_boxes, ground_mask]) 
+        """
+        
+        # ボクセル試す前にシンプルに距離さばき。
+        player_mask = Conv2D(1, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(feature_w_mask)
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                   arguments={"num_ch": 1, 
+                              "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        
+        """
+        #### 0108 feature ext
+        ### 0108 一時的
+        ext_ch = 8
+        feature_w_mask_stop = Lambda(lambda x: tf.stop_gradient(x))(feature_w_mask)
+        
+        feature_for_ext = cbr(feature_w_mask_stop, ext_ch, kernel=7, stride=1, name="player_cbr_ext")
+        
+        player_mask_w_f = Lambda(lambda x: tf.concat(x, axis=-1))([player_mask, feature_for_ext])
+
+        player_mask_w_f = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                   arguments={"num_ch": 1+ext_ch, 
+                              "wide_mode": True})([player_mask_w_f, input_boxes, ground_mask]) 
+        player_mask = Lambda(lambda x: x[...,:1])(player_mask_w_f)
+        player_features = Lambda(lambda x: x[...,1:])(player_mask_w_f)
+        """
+        
+        
+        """#12/20一時的に変更。裏表オクルージョンモデル。
+        player_mask = Conv2D(2, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(feature_w_mask)
+        # resize back to original scale, and reshape from [batch*num_box, h, w, 1] to [batch, num_box, h, w, 1]
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                   arguments={"num_ch": 2, 
+                              "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        
+        # is_contactを弱めに学習してもいいのかもしれない？？
+        # もしくは共通のグランドマスクを使う。
+        #"""
+        
+        
+    elif mode=="ch_attention":
+        x = feature_w_mask
+        #for layer_idx in range(3):
+        #    x = cbr(x, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+        x = cbr(x, 48, kernel=7, stride=1, name="player_cbr0")
+        for layer_idx in range(3):#5,7
+            x = resblock(x, 32, kernel=7, stride=1, name=f"player_resblock{layer_idx}", use_se=False)
+        
+        
+        x = GlobalAveragePooling2D()(x)
+        attention_weight = Dense(num_feature_ch, activation="sigmoid", name="ch_attention")(x)
+        attention_feature = Lambda(lambda x: x[0][...,:num_feature_ch] * tf.reshape(x[1], [-1,1,1,num_feature_ch]), name="mul_attention")([feature_w_mask, attention_weight])
+        player_mask = Conv2D(1, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(attention_feature)
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                                              arguments={"num_ch": 1, 
+                                                         "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        #Reshape((1,1,num_feature_ch), name="ch_attention_reshape")(attention_weight)
+        #x_out = Multiply()([features, attention_weight])
+        
+        
+    #"""
+    # concat masks, [batch, num_player+1(ground), h, w, 1]
+    #player_mask_w_d
+    
+    #player_mask = Lambda(lambda x: x[..., :1])(player_mask_w_d)
+    #depth_minmax = Lambda(lambda x: x[..., 1:])(player_mask_w_d)
+    #depth_minmax_w_dummy = Lambda(lambda x: tf.concat([tf.ones_like(x[:,0:1]), x],axis=1))(depth_minmax)
+    pos_w_dummy = Lambda(lambda x: tf.concat([tf.zeros_like(x[:,0:1]), x],axis=1))(input_player_positions)
+    
+    all_masks = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([ground_mask, player_mask])
+    
+    pairs_contact = Lambda(contact_btw_selected_pairs, name="contact_btw_selected_pairs",
+                   #arguments={"num_ch": 1, 
+                   #           "wide_mode": True},
+                   )([contact_map, all_masks, input_pairs]) 
+    
+    ### 0108 一時的
+    # player_features_dummy = Lambda(lambda x: tf.concat([tf.zeros_like(x[:,0:1]), x],axis=1))(player_features)
+    # pairs_features = Lambda(extract_peak_features, arguments={"num_ch": ext_ch})([pairs_contact, player_features_dummy, input_pairs])
+    
+
+    """
+    pairs_contact_penetration = Lambda(contact_btw_selected_pairs_depth, name="contact_btw_selected_pairs_d",
+                   #arguments={"num_ch": 1, 
+                   #           "wide_mode": True},
+                   )([depth_minmax_w_dummy, input_pairs]) 
+    pairs_contact_penetration = PenetrationLayer(max_thickness=thickness_scale*2)(pairs_contact_penetration)
+    """
+    
+    
+    """#12/20一時的に変更。uraomoteモデル
+    #all_masks = Lambda(lambda x: tf.concat([x[...,0:1], x[...,1:2]], axis=1))(player_mask) # concat ground and player_mask at 2nd axis
+    all_masks = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([ground_mask, player_mask])
+    pairs_contact = Lambda(contact_btw_selected_pairs_uraomote, name="contact_btw_selected_pairs",
+                   #arguments={"num_ch": 1, 
+                   #           "wide_mode": True},
+                   )([contact_map, all_masks, input_pairs]) 
+    
+    #pairs_contact = Lambda(contact_btw_selected_pairs_v2, name="contact_btw_selected_pairs",
+    #               #arguments={"num_ch": 1, 
+    #               #           "wide_mode": True},
+    #               )([contact_map, all_masks, input_pairs]) 
+    
+    #"""
+    
+    
+    
+    # ペア予測がないと、ABC三選手が画像上重なる場合に、A-B, B-Cのみが干渉するケースに対応できないかも…。
+    # マルチなロスにする方が自然かな…。この特徴が強すぎると詰むかも？
+    add_pairwise_mask = False
+    if add_pairwise_mask:
+        num_pair_feature = 4
+        feature_g = Conv2D(num_pair_feature, activation="relu", kernel_size=3, strides=1, padding="same", 
+                              name="features_g")(features)
+        feature_p = Conv2D(num_pair_feature, activation="relu", kernel_size=3, strides=1, padding="same", 
+                              name="features_p")(feature_w_mask)
+        feature_p = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize_features",
+                                              arguments={"num_ch": num_pair_feature, 
+                                                         "wide_mode": True})([feature_p, input_boxes, ground_mask]) 
+        features_gp = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([feature_g, feature_p])
+        pairs_feature = Lambda(contact_btw_selected_pairs_nomask, name="feature_btw_selected_pairs",
+                       )([features_gp, input_pairs]) 
+        pairwise_prediction = Conv2D(1, activation="sigmoid", kernel_size=1, strides=1, padding="same", 
+                              name="pairwise_prediction")(pairs_feature)
+        pairs_contact = Lambda(lambda x: x[0] * x[1], name="multiply_final_preds")([pairs_contact, pairwise_prediction])
+    
+    
+    #pairs_contact_reduced = Lambda(lambda x: tf.math.reduce_max(x, axis=[2,3,4]), name="output_contact_label")(pairs_contact)
+    #pairs_contact_reduced_penetration = Lambda(lambda x: tf.math.reduce_max(x, axis=[2,3,4]), name="output_contact_label_penetration")(pairs_contact_penetration)
+    
+    # TODO ピークの場所に対応する特徴量を引っ張り出してconcatなど。
+    pairs_contact_reduced = Lambda(lambda x: tf.math.reduce_max(x, axis=[2,3,4]), name="output_contact_label")(pairs_contact)
+    image_contact_reduced_stopgrad = Lambda(lambda x: tf.stop_gradient(x[...,tf.newaxis]), name="stop_grad")(pairs_contact_reduced)
+    # image_contact_reduced_stopgrad_filled = Lambda(fill_zero_with_average, name="player_ref_fill")(pairs_contact_reduced)
+    pairs_xyd = Lambda(extract_xyd_features)([pos_w_dummy, input_pairs])
+    ground_mask = Lambda(lambda x: tf.cast(x[:,:,1:2]==0, tf.float32))(input_pairs)
+    
+    #pairs_xydconf = Lambda(lambda x: tf.concat([tf.math.log(tf.clip_by_value(x[0]/(1-x[0]),1e-7,1e7)), x[1]], axis=-1))([image_contact_reduced_stopgrad, pairs_xyd])
+    pairs_xydconf = Lambda(lambda x: tf.concat([x[0]-0.5, x[1]*10], axis=-1))([image_contact_reduced_stopgrad, pairs_xyd])
+    
+    ### 0108 一時的
+    ## pairs_features = Lambda(lambda x: tf.concat(x, axis=-1))([pairs_features, pairs_xydconf])
+    pairs_features = pairs_xydconf
+    
+    # too shallow?
+    #pairs_xydconf = Dense(32, activation="relu")(pairs_xydconf)
+    # pairs_xydconf = Dropout(0.2)(pairs_xydconf)
+    #image_contact_reduced_stopgrad_bn = BatchNormalization()(image_contact_reduced_stopgrad)
+    
+    #total_pred = Dense(1, activation="sigmoid", 
+    #                   #kernel_initializer='ones',
+    #                   #bias_initializer='zeros',
+    #                   name="poutput_contact_label_penetration")(image_contact_reduced_stopgrad)# 一時的な名称
+    
+    # predict by image and positions
+    pairs_features = Dense(128, activation="relu", name="dense0")(pairs_features)
+    pairs_features = Dense(128, activation="relu", name="dense1")(pairs_features)
+    pairs_features = Dropout(0.2)(pairs_features)
+    player_pred = Dense(1, activation="sigmoid", name="output_contact_label_player")(pairs_features)
+    #total_pred = Lambda(lambda x: x[0], name="output_contact_label_penetration")([total_pred, player_mask])# 一時的な名称
+    
+    
+    # features for ground contact
+    """
+    pf_ch = 16
+    player_features = player_coords_feature_branch(input_boxes, input_player_positions, out_ch=pf_ch)
+    player_features_w_dummy = Lambda(lambda x: tf.concat([tf.zeros_like(x[:,0:1]), x],axis=1))(player_features)
+    pairs_g_contact_features = Lambda(extract_pair_features_single,
+                                       arguments={"num_ch":pf_ch, "only_1":True})([player_features_w_dummy, input_pairs])# for ground
+    pairs_xydconf_g = Lambda(lambda x: tf.concat([x[0]-0.5, x[1]], axis=-1))([image_contact_reduced_stopgrad, pairs_g_contact_features])
+    pairs_features_g = Dense(128, activation="relu", name="dense0_g")(pairs_xydconf_g)
+    pairs_features_g = Dense(128, activation="relu", name="dense1_g")(pairs_features_g)
+    pairs_features_g = Dropout(0.2)(pairs_features_g)
+    ground_pred = Dense(1, activation="sigmoid", name="output_contact_label_ground")(pairs_features_g)
+    output_contact_label_total = Lambda(lambda x: (x[0]*x[2] + x[1]*(1.-x[2]))[...,0], name="output_contact_label_total")([ground_pred, player_pred, ground_mask])
+    """
+    
+    
+    
+    player_pred_stopgrad = Lambda(lambda x: tf.stop_gradient(x), name="stop_grad_p")(player_pred)
+    #output_contact_label_total = Lambda(lambda x: (x[0]*x[2] + x[1]*(1.-x[2]))[...,0], name="output_contact_label_total")([image_contact_reduced_stopgrad, player_pred_stopgrad, ground_mask])
+    
+    
+    
+    #player_pred_stopgrad = Lambda(lambda x: tf.stop_gradient(x), name="stop_grad_p")(player_pred)
+    output_contact_label_total = Lambda(lambda x: x[0]*x[2] + x[1]*(1.-x[2])[...,0], name="output_contact_label_total")(image_contact_reduced_stopgrad, player_pred_stopgrad, ground_mask)
+    #total_pred = Lambda(lambda x:x[...,0], name="output_contact_label_penetration")(total_pred)# 一時的な名称
+    
+    
+    inputs = [input_rgb, input_boxes, input_pairs, input_player_positions]
+    outputs = [pairs_contact_reduced, 
+               player_pred, 
+               output_contact_label_total, 
+               contact_map]
+    losses = {"output_contact_label": bce_loss,#"z_error": weighted_dummy_loss,
+              "output_contact_label_player": bce_loss,#"z_error": weighted_dummy_loss,
+              "output_contact_label_total": bce_loss,
+              "contact_map": l2_regularization,
+              }
+    loss_weights = {"output_contact_label": 1.,#{"z_error": 1e-4,
+                    "output_contact_label_player": 1.,#{"z_error": 1e-4,
+                    "output_contact_label_total":1,
+                    "contact_map": 0.01,
+                    }
+    metrics = {"output_contact_label": [matthews_correlation_best],
+                "output_contact_label_player": [matthews_correlation_best],
+                "output_contact_label_total": [matthews_correlation_best],
+                }
+    
+    
+    
+    
+    model = Model(inputs, outputs)
+    
+    sub_model = Model(inputs, [pairs_contact, 
+                               pairs_contact_reduced,
+                               output_contact_label_total,
+                               ])
+    if not return_feature_ext:
+        return model, sub_model, losses, loss_weights, metrics
+    else:
+        model_feature_ext = Model([input_rgb], [decoder_out])
+        return model, sub_model, model_feature_ext
+
+def build_model_multiply_contact(input_shape=(256,256,3),
+             backbone="effv2s", 
+             minimum_stride=2, 
+             max_stride = 64,
+             is_train=True,
+             num_boxes = None,
+             from_scratch=False,
+             return_feature_ext=False):
     """
     model inputs:
         - normalized rgb(d)
@@ -716,12 +1592,15 @@ def build_model(input_shape=(256,256,3),
     
     outs = decoder(x, skip_connections, use_batchnorm=True, 
                    num_channels=32, max_stride=max_stride, minimum_stride=minimum_stride)
-
+    decoder_out = outs[-1]
     x = outs[-1]
     contact_map = Conv2D(1, activation="sigmoid", kernel_size=3, strides=1, 
                         padding="same", 
                         name="contact_map",)(x)
-    ground_mask = Conv2D(1, activation="sigmoid", kernel_size=3, strides=1, 
+    
+    num_feature_contact = 8
+    ground_mask = Conv2D(num_feature_contact, activation="linear", 
+                         kernel_size=3, strides=1, 
                         padding="same", 
                         name="ground_mask",)(x)
     
@@ -741,8 +1620,272 @@ def build_model(input_shape=(256,256,3),
     # ch = num_feature_ch + 2(one is self_mask, the other is other_mask)
     mode="direct_mask"
     if mode=="direct_mask":
+        #x_0 = feature_w_mask
+        #x_1 = AveragePooling2D(2)(x_0)
+        #x_2 = AveragePooling2D(2)(x_1)
+        for layer_idx in range(3):#7x3
+            feature_w_mask = cbr(feature_w_mask, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+            #x_0 = cbr(x_0, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+            #x_1 = cbr(x_1, 32, kernel=7, stride=1, name=f"player_cbrs{layer_idx}")
+            #x_2 = cbr(x_2, 32, kernel=7, stride=1, name=f"player_cbrss{layer_idx}")
+        
+        #x_1 = UpSampling2D(2)(x_1)
+        #x_2 = UpSampling2D(4)(x_2)
+        #feature_w_mask = Lambda(lambda x: tf.concat(x, axis=-1))([x_0,x_1,x_2])
+        
+        
+        #feature_w_mask = cbr(feature_w_mask, 48, kernel=7, stride=1, name="player_cbr0")
+        #for layer_idx in range(3):
+        #    feature_w_mask = resblock(feature_w_mask, 48, kernel=7, stride=1, name=f"player_resblock{layer_idx}", use_se=False)
+        
+        #"""
+        player_mask = Conv2D(num_feature_contact, activation="linear", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(feature_w_mask)
+        # resize back to original scale, and reshape from [batch*num_box, h, w, 1] to [batch, num_box, h, w, 1]
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                   arguments={"num_ch": num_feature_contact, 
+                              "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        
+        """#12/20一時的に変更。裏表オクルージョンモデル。
+        player_mask = Conv2D(2, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(feature_w_mask)
+        # resize back to original scale, and reshape from [batch*num_box, h, w, 1] to [batch, num_box, h, w, 1]
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                   arguments={"num_ch": 2, 
+                              "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        
+        # is_contactを弱めに学習してもいいのかもしれない？？
+        # もしくは共通のグランドマスクを使う。
+        #"""
+        
+        
+    elif mode=="ch_attention":
+        x = feature_w_mask
+        #for layer_idx in range(3):
+        #    x = cbr(x, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+        x = cbr(x, 48, kernel=7, stride=1, name="player_cbr0")
+        for layer_idx in range(3):
+            x = resblock(x, 32, kernel=7, stride=1, name=f"player_resblock{layer_idx}", use_se=False)
+        
+        
+        x = GlobalAveragePooling2D()(x)
+        attention_weight = Dense(num_feature_ch, activation="sigmoid", name="ch_attention")(x)
+        attention_feature = Lambda(lambda x: x[0][...,:num_feature_ch] * tf.reshape(x[1], [-1,1,1,num_feature_ch]), name="mul_attention")([feature_w_mask, attention_weight])
+        player_mask = Conv2D(1, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(attention_feature)
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                                              arguments={"num_ch": 1, 
+                                                         "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        #Reshape((1,1,num_feature_ch), name="ch_attention_reshape")(attention_weight)
+        #x_out = Multiply()([features, attention_weight])
+        
+        
+    #"""
+    # concat masks, [batch, num_player+1(ground), h, w, 1]
+    all_masks = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([ground_mask, player_mask])
+    
+    pairs_contact = Lambda(contact_btw_selected_pairs_logit, name="contact_btw_selected_pairs",
+                   #arguments={"num_ch": 1, 
+                   #           "wide_mode": True},
+                   )([contact_map, all_masks, input_pairs]) 
+    
+    """#12/20一時的に変更。uraomoteモデル
+    #all_masks = Lambda(lambda x: tf.concat([x[...,0:1], x[...,1:2]], axis=1))(player_mask) # concat ground and player_mask at 2nd axis
+    all_masks = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([ground_mask, player_mask])
+    pairs_contact = Lambda(contact_btw_selected_pairs_uraomote, name="contact_btw_selected_pairs",
+                   #arguments={"num_ch": 1, 
+                   #           "wide_mode": True},
+                   )([contact_map, all_masks, input_pairs]) 
+    
+    #pairs_contact = Lambda(contact_btw_selected_pairs_v2, name="contact_btw_selected_pairs",
+    #               #arguments={"num_ch": 1, 
+    #               #           "wide_mode": True},
+    #               )([contact_map, all_masks, input_pairs]) 
+    
+    #"""
+    
+    
+    
+    # ペア予測がないと、ABC三選手が画像上重なる場合に、A-B, B-Cのみが干渉するケースに対応できないかも…。
+    # マルチなロスにする方が自然かな…。この特徴が強すぎると詰むかも？
+    add_pairwise_mask = False
+    if add_pairwise_mask:
+        num_pair_feature = 4
+        feature_g = Conv2D(num_pair_feature, activation="relu", kernel_size=3, strides=1, padding="same", 
+                              name="features_g")(features)
+        feature_p = Conv2D(num_pair_feature, activation="relu", kernel_size=3, strides=1, padding="same", 
+                              name="features_p")(feature_w_mask)
+        feature_p = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize_features",
+                                              arguments={"num_ch": num_pair_feature, 
+                                                         "wide_mode": True})([feature_p, input_boxes, ground_mask]) 
+        features_gp = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([feature_g, feature_p])
+        pairs_feature = Lambda(contact_btw_selected_pairs_nomask, name="feature_btw_selected_pairs",
+                       )([features_gp, input_pairs]) 
+        pairwise_prediction = Conv2D(1, activation="sigmoid", kernel_size=1, strides=1, padding="same", 
+                              name="pairwise_prediction")(pairs_feature)
+        pairs_contact = Lambda(lambda x: x[0] * x[1], name="multiply_final_preds")([pairs_contact, pairwise_prediction])
+    
+    
+    
+    
+    pairs_contact_reduced = Lambda(lambda x: tf.math.reduce_max(x, axis=[2,3,4]), name="output_contact_label")(pairs_contact)
+    
+    inputs = [input_rgb, input_boxes, input_pairs]
+    outputs = [pairs_contact_reduced, contact_map]
+    losses = {"output_contact_label": bce_loss,#"z_error": weighted_dummy_loss,
+              "contact_map": l2_regularization,
+              #"zoom_dev_abs": weighted_dummy_loss
+              }
+    loss_weights = {"output_contact_label": 1.,#{"z_error": 1e-4,
+                    "contact_map": 0.01,
+                    #"zoom_dev_abs": 0.1*4
+                    }
+    metrics = {"output_contact_label": [matthews_correlation_best]}
+    
+    
+    
+    
+    model = Model(inputs, outputs)
+    
+    sub_model = Model(inputs, [pairs_contact, pairs_contact_reduced])
+    if not return_feature_ext:
+        return model, sub_model, losses, loss_weights, metrics
+    else:
+        model_feature_ext = Model([input_rgb], [decoder_out])
+        return model, sub_model, model_feature_ext
+
+import tensorflow_addons as tfa
+
+def bilinear_warp_layer(inputs):
+    features, warp_coords = inputs
+    
+    def warp_bilinear_tfa(features, warp_coords):
+        batch, height, width, _ = tf.unstack(tf.shape(features))
+        x_idx = warp_coords[...,:1]
+        y_idx = warp_coords[...,1:2]
+        #inside_frame_x = tf.math.logical_and(x_idx >= 0., x_idx <= tf.cast(width-1, tf.float32))
+        #inside_frame_y = tf.math.logical_and(y_idx >= 0., y_idx <= tf.cast(height-1, tf.float32))
+        #inside_frame = tf.math.logical_and(inside_frame_x, inside_frame_y)
+        x_idx = tf.clip_by_value(x_idx, 0., tf.cast(width-1, tf.float32))
+        y_idx = tf.clip_by_value(y_idx, 0., tf.cast(height-1, tf.float32))
+        warp_coords = tf.concat([x_idx, y_idx], axis=-1)
+        warped = tfa.image.resampler(features, warp_coords)#easiest way is use tfa library
+        return warped#, inside_frame
+    
+    """def rgbreconst_by_flow(data, default_grid, input_shape):
+        #origin_size = tf.cast(tf.stack([data["flow_width"], data["flow_height"]]), tf.float32)
+        #target_size = tf.cast(tf.stack([data["img_width"], data["img_height"]]), tf.float32)
+        #rate = target_size / origin_size
+        #resized_flow = tf.image.resize(tf.stack([data["flow_21"],data["flow_12"]]), 
+        #                              (data["img_height"], data["img_width"]), method="bilinear")
+        #resized_flow = resized_flow * rate[tf.newaxis, tf.newaxis, tf.newaxis, :] #multiply flow scale
+        warp_coord = default_grid + tf.stack([data["flow_21"],data["flow_12"]])
+        reconst_rgb = warp_bilinear_tfa(tf.stack([data["rgb_p"],data["rgb_n"]]), warp_coord)#add batch dim
+        #data["rgb_reconst_from_p"] = tf.reshape(reconst_rgb[0], [data["img_height"], data["img_width"], 3])# - data["rgb"]
+        #data["rgb_reconst_from_n"] = tf.reshape(reconst_rgb[1], [data["img_height"], data["img_width"], 3])# - data["rgb"]
+        data["rgb_reconst_from_p"] = tf.reshape(reconst_rgb[0], [input_shape[0], input_shape[1], 3])# - data["rgb"]
+        data["rgb_reconst_from_n"] = tf.reshape(reconst_rgb[1], [input_shape[0], input_shape[1], 3])# - data["rgb"]
+        
+        #data["rgb_reconst_prev"] = data["rgb_prev"]
+        #data["rgb_reconst_next"] = data["rgb_next"]
+        return data
+    """
+    
+    reconst_features = warp_bilinear_tfa(features, warp_coords)
+    reconst_features = tf.reshape(reconst_features, tf.shape(features))
+    return reconst_features
+
+
+def build_model_multiframe(input_shape=(256,256,3),
+             backbone="effv2s", 
+             minimum_stride=2, 
+             max_stride = 64,
+             is_train=True,
+             num_boxes = None,
+             feature_ext_weight=""):
+    """
+    model inputs:
+        - normalized rgb(d)
+        - boxes(normalized coordinates to show box location. top,left,bottom,right)
+    """
+    
+    model, sub_model, model_feature_ext = build_model(input_shape=input_shape,
+                                         backbone=backbone, 
+                                         minimum_stride=2, 
+                                         max_stride = 64,
+                                         is_train=False,
+                                         num_boxes = num_boxes,
+                                         from_scratch=True,
+                                         return_feature_ext=True)
+    model.load_weights(feature_ext_weight)
+    model.trainable = False
+    model_feature_ext.trainable = False
+    
+    
+    input_rgb_pp = Input(input_shape, name="input_rgb_pp")
+    input_rgb_p = Input(input_shape, name="input_rgb_p")
+    input_rgb_c = Input(input_shape, name="input_rgb_c")
+    input_rgb_n = Input(input_shape, name="input_rgb_n")
+    input_rgb_nn = Input(input_shape, name="input_rgb_nn")
+    input_boxes = Input(shape=[num_boxes,4], name="input_boxes")
+    input_pairs = Input(shape=[None,2], name="input_pairs", dtype=tf.int32)
+    
+    #input_warp_p = Input([input_shape[0]//minimum_stride, input_shape[1]//minimum_stride, 2], name="input_warp_p")
+    #input_warp_n = Input([input_shape[0]//minimum_stride, input_shape[1]//minimum_stride, 2], name="input_warp_n")
+    
+    pp_features = model_feature_ext(input_rgb_pp, training=False)
+    p_features = model_feature_ext(input_rgb_p, training=False)
+    c_features = model_feature_ext(input_rgb_c, training=False)
+    n_features = model_feature_ext(input_rgb_n, training=False)
+    nn_features = model_feature_ext(input_rgb_nn, training=False)
+    
+    #p_features = Lambda(bilinear_warp_layer)([p_features, input_warp_p])
+    #n_features = Lambda(bilinear_warp_layer)([n_features, input_warp_n])
+        
+    #pcn_features = Lambda(lambda x: tf.concat(x, axis=-1))([pp_features, p_features, c_features, n_features, nn_features])
+    pcn_features = Lambda(lambda x: tf.stack(x, axis=-2))([pp_features, p_features, c_features, n_features, nn_features])
+    
+    contact_map = Conv3D(1, activation="sigmoid", kernel_size=5, strides=1, 
+                        padding="same", 
+                        name="contact_map_pre",)(pcn_features)
+    contact_map = Lambda(lambda x: x[...,2,:], name = "contact_map")(contact_map) # middle frame
+    ground_mask = Conv3D(1, activation="sigmoid", kernel_size=5, strides=1, 
+                        padding="same", 
+                        name="ground_mask_pre",)(pcn_features)
+    ground_mask = Lambda(lambda x: x[...,2,:])(ground_mask)
+    num_feature_ch = 24
+    features = Conv3D(num_feature_ch, activation="relu", kernel_size=5, strides=1, padding="same", 
+                          name="rgb_features")(pcn_features)
+    features = Lambda(lambda x: x[...,2,:])(features)
+    feature_w_mask = Lambda(add_bbox_img, arguments={"only_overlap": False}, 
+                            name="add_box_mask")([features, input_boxes])
+    feature_w_mask = Lambda(larger_crop_resize_layer, name="wide_crop_resize",
+                   arguments={"num_ch": num_feature_ch+1, 
+                              "crop_size": [72,72], 
+                              "add_crop_mask": True,
+                              "wide_mode": True})([feature_w_mask, input_boxes]) 
+    feature_w_mask = Lambda(get_dev_overlap,
+                                arguments={"multi_mask": True},
+                                name="dev_mask")(feature_w_mask)
+    
+    # ch = num_feature_ch + 2(one is self_mask, the other is other_mask)
+    mode="direct_mask"
+    if mode=="direct_mask":
+        #x_0 = feature_w_mask
+        #x_1 = AveragePooling2D(2)(x_0)
+        #x_2 = AveragePooling2D(2)(x_1)
+        
         for layer_idx in range(3):
             feature_w_mask = cbr(feature_w_mask, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+            #x_0 = cbr(x_0, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+            #x_1 = cbr(x_1, 32, kernel=7, stride=1, name=f"player_cbrs{layer_idx}")
+            #x_2 = cbr(x_2, 32, kernel=7, stride=1, name=f"player_cbrss{layer_idx}")
+        
+        #x_1 = UpSampling2D(2)(x_1)
+        #x_2 = UpSampling2D(4)(x_2)
+        #feature_w_mask = Lambda(lambda x: tf.concat(x, axis=-1))([x_0,x_1,x_2])
+        
+        
         #feature_w_mask = cbr(feature_w_mask, 48, kernel=7, stride=1, name="player_cbr0")
         #for layer_idx in range(3):
         #    feature_w_mask = resblock(feature_w_mask, 48, kernel=7, stride=1, name=f"player_resblock{layer_idx}", use_se=False)
@@ -839,7 +1982,8 @@ def build_model(input_shape=(256,256,3),
     
     pairs_contact_reduced = Lambda(lambda x: tf.math.reduce_max(x, axis=[2,3,4]), name="output_contact_label")(pairs_contact)
     
-    inputs = [input_rgb, input_boxes, input_pairs]
+    inputs = [input_rgb_pp, input_rgb_p, input_rgb_c, input_rgb_n, input_rgb_nn, input_boxes, input_pairs,
+              ]
     outputs = [pairs_contact_reduced, contact_map]
     losses = {"output_contact_label": bce_loss,#"z_error": weighted_dummy_loss,
               "contact_map": l2_regularization,
@@ -851,14 +1995,220 @@ def build_model(input_shape=(256,256,3),
                     }
     metrics = {"output_contact_label": [matthews_correlation_best]}
     
-    
-    
-    
+        
     model = Model(inputs, outputs)
     
     sub_model = Model(inputs, [pairs_contact, pairs_contact_reduced])
     return model, sub_model, losses, loss_weights, metrics
 
+
+
+
+def build_model_multi(input_shape=(256,256,3),
+             backbone="effv2s", 
+             minimum_stride=2, 
+             max_stride = 64,
+             is_train=True,
+             num_boxes = None,
+             from_scratch=False):
+    """
+    model inputs:
+        - normalized rgb(d)
+        - boxes(normalized coordinates to show box location. top,left,bottom,right)
+    """
+    input_rgb = Input(input_shape, name="input_rgb")#256,256,3
+    input_boxes = Input(shape=[num_boxes,4], name="input_boxes")
+    input_pairs = Input(shape=[None,2], name="input_pairs", dtype=tf.int32)
+    enc_in = input_rgb
+    
+    model_names = {"effv2s":"s", "effv2m":"m", "effv2l":"l", "effv2xl":"xl"}
+    if backbone not in model_names.keys():
+        raise Exception("check backbone name")
+    x, skip_connections = effv2_encoder(enc_in, is_train, from_scratch, model_name = model_names[backbone])
+
+    use_coord_conv = False
+
+    if use_coord_conv:
+        print("use coords")
+        
+        x = Lambda(add_coords, name="add_coords")(x)
+        x = Lambda(add_high_freq_coords, name="add_high_freq_coords")(x)
+    
+    outs = decoder(x, skip_connections, use_batchnorm=True, 
+                   num_channels=32, max_stride=max_stride, minimum_stride=minimum_stride)
+
+    x = outs[-1]
+    contact_map = Conv2D(1, activation="sigmoid", kernel_size=3, strides=1, 
+                        padding="same", 
+                        name="contact_map",)(x)
+    ground_mask = Conv2D(1, activation="sigmoid", kernel_size=3, strides=1, 
+                        padding="same", 
+                        name="ground_mask",)(x)
+    
+    num_feature_ch = 24
+    features = Conv2D(num_feature_ch, activation="relu", kernel_size=3, strides=1, padding="same", 
+                          name="rgb_features")(x)
+    feature_w_mask = Lambda(add_bbox_img, arguments={"only_overlap": False}, 
+                            name="add_box_mask")([features, input_boxes])
+    feature_w_mask = Lambda(larger_crop_resize_layer, name="wide_crop_resize",
+                   arguments={"num_ch": num_feature_ch+1, 
+                              "crop_size": [72,72], 
+                              "add_crop_mask": True,
+                              "wide_mode": True})([feature_w_mask, input_boxes]) 
+    feature_w_mask = Lambda(get_dev_overlap,
+                                arguments={"multi_mask": True},
+                                name="dev_mask")(feature_w_mask)
+    # ch = num_feature_ch + 2(one is self_mask, the other is other_mask)
+    mode="direct_mask"
+    if mode=="direct_mask":
+        #x_0 = feature_w_mask
+        #x_1 = AveragePooling2D(2)(x_0)
+        #x_2 = AveragePooling2D(2)(x_1)
+        
+        for layer_idx in range(3):
+            feature_w_mask = cbr(feature_w_mask, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+            #x_0 = cbr(x_0, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+            #x_1 = cbr(x_1, 32, kernel=7, stride=1, name=f"player_cbrs{layer_idx}")
+            #x_2 = cbr(x_2, 32, kernel=7, stride=1, name=f"player_cbrss{layer_idx}")
+        
+        #x_1 = UpSampling2D(2)(x_1)
+        #x_2 = UpSampling2D(4)(x_2)
+        #feature_w_mask = Lambda(lambda x: tf.concat(x, axis=-1))([x_0,x_1,x_2])
+        
+        
+        #feature_w_mask = cbr(feature_w_mask, 48, kernel=7, stride=1, name="player_cbr0")
+        #for layer_idx in range(3):
+        #    feature_w_mask = resblock(feature_w_mask, 48, kernel=7, stride=1, name=f"player_resblock{layer_idx}", use_se=False)
+        
+        #"""
+        player_mask = Conv2D(1, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(feature_w_mask)
+        # resize back to original scale, and reshape from [batch*num_box, h, w, 1] to [batch, num_box, h, w, 1]
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                   arguments={"num_ch": 1, 
+                              "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        
+        """#12/20一時的に変更。裏表オクルージョンモデル。
+        player_mask = Conv2D(2, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(feature_w_mask)
+        # resize back to original scale, and reshape from [batch*num_box, h, w, 1] to [batch, num_box, h, w, 1]
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                   arguments={"num_ch": 2, 
+                              "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        
+        # is_contactを弱めに学習してもいいのかもしれない？？
+        # もしくは共通のグランドマスクを使う。
+        #"""
+        
+        
+    elif mode=="ch_attention":
+        x = feature_w_mask
+        #for layer_idx in range(3):
+        #    x = cbr(x, 32, kernel=7, stride=1, name=f"player_cbr{layer_idx}")
+        x = cbr(x, 48, kernel=7, stride=1, name="player_cbr0")
+        for layer_idx in range(3):
+            x = resblock(x, 32, kernel=7, stride=1, name=f"player_resblock{layer_idx}", use_se=False)
+        
+        
+        x = GlobalAveragePooling2D()(x)
+        attention_weight = Dense(num_feature_ch, activation="sigmoid", name="ch_attention")(x)
+        attention_feature = Lambda(lambda x: x[0][...,:num_feature_ch] * tf.reshape(x[1], [-1,1,1,num_feature_ch]), name="mul_attention")([feature_w_mask, attention_weight])
+        player_mask = Conv2D(1, activation="sigmoid", kernel_size=7, strides=1, padding="same", 
+                           name="player_mask")(attention_feature)
+        player_mask = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize",
+                                              arguments={"num_ch": 1, 
+                                                         "wide_mode": True})([player_mask, input_boxes, ground_mask]) 
+        #Reshape((1,1,num_feature_ch), name="ch_attention_reshape")(attention_weight)
+        #x_out = Multiply()([features, attention_weight])
+        
+        
+    #"""
+    # concat masks, [batch, num_player+1(ground), h, w, 1]
+    all_masks = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([ground_mask, player_mask])
+    
+    pairs_contact = Lambda(contact_btw_selected_pairs, name="contact_btw_selected_pairs",
+                   #arguments={"num_ch": 1, 
+                   #           "wide_mode": True},
+                   )([contact_map, all_masks, input_pairs]) 
+    
+    """#12/20一時的に変更。uraomoteモデル
+    #all_masks = Lambda(lambda x: tf.concat([x[...,0:1], x[...,1:2]], axis=1))(player_mask) # concat ground and player_mask at 2nd axis
+    all_masks = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([ground_mask, player_mask])
+    pairs_contact = Lambda(contact_btw_selected_pairs_uraomote, name="contact_btw_selected_pairs",
+                   #arguments={"num_ch": 1, 
+                   #           "wide_mode": True},
+                   )([contact_map, all_masks, input_pairs]) 
+    
+    #pairs_contact = Lambda(contact_btw_selected_pairs_v2, name="contact_btw_selected_pairs",
+    #               #arguments={"num_ch": 1, 
+    #               #           "wide_mode": True},
+    #               )([contact_map, all_masks, input_pairs]) 
+    
+    #"""
+    
+    
+    
+    # ペア予測がないと、ABC三選手が画像上重なる場合に、A-B, B-Cのみが干渉するケースに対応できないかも…。
+    # マルチなロスにする方が自然かな…。この特徴が強すぎると詰むかも？
+    add_pairwise_mask = True
+    if add_pairwise_mask:
+        num_pair_feature = 6
+        feature_g = Conv2D(num_pair_feature, activation="relu", kernel_size=7, strides=1, padding="same", 
+                              name="features_g")(features)
+        #add white(mask)
+        feature_g = Lambda(lambda x: tf.concat([x, tf.ones_like(x[...,:1])], axis=-1))(feature_g)
+        
+        feature_p = Conv2D(num_pair_feature, activation="relu", kernel_size=7, strides=1, padding="same", 
+                              name="features_p")(feature_w_mask)
+        #add white(mask)
+        feature_p = Lambda(lambda x: tf.concat([x, tf.ones_like(x[...,:1])], axis=-1))(feature_p)
+        feature_p = Lambda(inv_larger_crop_resize_layer, name="inv_wide_crop_resize_features",
+                                              arguments={"num_ch": num_pair_feature+1, 
+                                                         "wide_mode": True})([feature_p, input_boxes, ground_mask]) 
+        features_gp = Lambda(lambda x: tf.concat([x[0][:,tf.newaxis], x[1]], axis=1))([feature_g, feature_p])
+        #pairs_feature = Lambda(contact_btw_selected_pairs_nomask, name="feature_btw_selected_pairs",
+        #               )([features_gp, input_pairs]) 
+        pairs_feature, player_12_mask = Lambda(contact_btw_selected_pairs_feature_only_exist, name="feature_btw_selected_pairs",
+                       )([features_gp, input_pairs]) 
+        
+        
+        
+
+        
+        pairwise_prediction_2 = Conv2D(1, activation="sigmoid", kernel_size=1, strides=1, padding="same", 
+                              name="pairwise_prediction")(pairs_feature)
+        
+        pairwise_prediction_2 = Lambda(lambda x: x[0] * x[1])([pairwise_prediction_2, player_12_mask])
+    
+    
+    
+    pairs_contact_reduced = Lambda(lambda x: tf.math.reduce_max(x, axis=[2,3,4]), name="output_contact_label")(pairs_contact)
+
+    pairs_contact_reduced_concat = Lambda(lambda x: tf.math.reduce_max(x, axis=[2,3,4]), name="output_contact_label_concat")(pairwise_prediction_2)
+
+    
+    inputs = [input_rgb, input_boxes, input_pairs]
+    outputs = [pairs_contact_reduced, pairs_contact_reduced_concat, contact_map]
+    losses = {"output_contact_label": bce_loss,#"z_error": weighted_dummy_loss,
+              "output_contact_label_concat": bce_loss,#"z_error": weighted_dummy_loss,
+              "contact_map": l2_regularization,
+              #"zoom_dev_abs": weighted_dummy_loss
+              }
+    loss_weights = {"output_contact_label": 1.,#{"z_error": 1e-4,
+                    "output_contact_label_concat": 1.,#{"z_error": 1e-4,
+                    "contact_map": 0.01,
+                    #"zoom_dev_abs": 0.1*4
+                    }
+    metrics = {"output_contact_label": [matthews_correlation_best],
+               "output_contact_label_concat": [matthews_correlation_best]}
+    
+    
+    
+    
+    model = Model(inputs, outputs)
+    
+    sub_model = Model(inputs, [pairs_contact, pairs_contact_reduced_concat])
+    return model, sub_model, losses, loss_weights, metrics
 
 def _build_model(input_shape=(256,256,3),
              backbone="effv2s", 
@@ -1110,3 +2460,6 @@ if __name__ == "__main__":
 
     model, _, _, _ = build_model(from_scratch=True)
     print(model.summary())
+    
+    
+    
