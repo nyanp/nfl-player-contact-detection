@@ -260,7 +260,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp018_exp017+mp_interpolate_debug',
+        EXP_NAME='exp019_exp048_both_org_and_agg_re',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,
