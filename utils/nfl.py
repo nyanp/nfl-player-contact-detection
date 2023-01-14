@@ -89,7 +89,7 @@ class Config:
     PROJECT: str = 'nfl2022-lgbm'
     EXP_NAME: str = 'exp000'
     INPUT: str = "../input/nfl-player-contact-detection"
-    HELMET_DIR: str = "../input/interpolated/"
+    HELMET_DIR: str = "../input/nfl-player-contact-detection/"
     CACHE: str = "./data/ver0108"
     USE_PRETRAINED_MODEL: bool = False
     PRETRAINED_MODEL_PATH: str = "../input/nfl-baseline-oof"
@@ -250,7 +250,7 @@ def expand_helmet(cfg, df, phase="train"):
         "height"
     ]
     helmet = read_csv_with_cache(
-        f"interpolated_{phase}_helmets.csv", cfg.HELMET_DIR, cfg.CACHE, usecols=helmet_cols)
+        f"{phase}_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE, usecols=helmet_cols)
     meta = read_csv_with_cache(f"{phase}_video_metadata.csv", cfg.INPUT, cfg.CACHE)
     df = merge_helmet(df, helmet, meta)
     return df
