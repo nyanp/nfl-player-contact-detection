@@ -1,6 +1,18 @@
+from typing import List
 import pandas as pd
 import numpy as np
 import glob
+
+
+def add_cnn_shift_diff_feature(df: pd.DataFrame, shift_steps: List[int] = [-5, -3, -1, 1, 3, 5],
+                               columns: List[str] = ["cnn_pred_Sideline", "cnn_pred_Endzone"]) -> pd.DataFrame:
+    for col in columns:
+        for shift_step in shift_steps:
+            df[f'{col}_shift_{shift_step}'] = (df.sort_values('step')
+                                               .groupby(['game_play', 'nfl_player_id_1', 'nfl_player_id_2'])[col]
+                                               .shift(shift_step).reset_index().sort_values('index').set_index('index'))
+            df[f'{col}_diff_{shift_step}'] = df[col] - df[f'{col}_shift_{shift_step}']
+    return df
 
 
 def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None):

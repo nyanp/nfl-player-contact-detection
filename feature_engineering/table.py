@@ -583,3 +583,46 @@ def add_bbox_std_overlap_feature(df):
         df[f"bbox_y_std_overlap_{view}"] = (np.minimum(yc1 + h1 / 2, yc2 + h2 / 2) - np.maximum(yc1 - h1 / 2, yc2 - h2 / 2)) / (h1 + h2)
 
     return df
+
+
+def bbox_y_endzone_diff_feature(df, distance_th=3.0):
+    """近傍の選手のbboxのy座標との差をとる（転んでいる選手を検出）"""
+    bbox_y_neighbor = df[[
+        "game_play", "step", "nfl_player_id_1", "nfl_player_id_2",
+        "bbox_center_y_Endzone_1", "bbox_center_y_Endzone_2", "distance"
+    ]].copy()
+
+    if df["distance"].max() > distance_th:
+        bbox_y_neighbor = bbox_y_neighbor[df["distance"] < distance_th]
+    bbox_y_neighbor["weight"] = 1 / (bbox_y_neighbor["distance"] + 0.1)
+    bbox_y_neighbor_swap = bbox_y_neighbor.copy()
+    bbox_y_neighbor_swap.columns = [
+        "game_play", "step", "nfl_player_id_2", "nfl_player_id_1",
+        "bbox_center_y_Endzone_2", "bbox_center_y_Endzone_1", "distance", "weight"
+    ]
+    bbox_y_neighbor = pd.concat([bbox_y_neighbor, bbox_y_neighbor_swap[bbox_y_neighbor.columns]])
+
+    del bbox_y_neighbor_swap
+    # player_id_1の近傍distance_th以内にいる他プレーヤーのbbox座標を集約する
+
+    bbox_y_neighbor["wy"] = bbox_y_neighbor["weight"] * bbox_y_neighbor["bbox_center_y_Endzone_2"]
+    bbox_neighbor_agg = bbox_y_neighbor.groupby(["game_play", "step", "nfl_player_id_1"]).agg(
+        neighbor_count_1=pd.NamedAgg("nfl_player_id_2", "count"),
+        neighbor_y_wy_sum_1=pd.NamedAgg("wy", "sum"),
+        neighbor_y_w_sum_1=pd.NamedAgg("weight", "sum"),
+        neighbor_y_mean_1=pd.NamedAgg("bbox_center_y_Endzone_2", "mean"),
+        #neighbor_y_count = pd.NamedAgg("bbox_center_y_Endzone_2", "count"),
+    ).reset_index()
+    bbox_neighbor_agg["neighbor_y_w_mean_1"] = bbox_neighbor_agg["neighbor_y_wy_sum_1"] / bbox_neighbor_agg["neighbor_y_w_sum_1"]
+    del bbox_neighbor_agg["neighbor_y_wy_sum_1"]
+    del bbox_neighbor_agg["neighbor_y_w_sum_1"]
+    # 転んでいる人を拾いたいので、player_id_1だけ特徴量を作る。id_2側に追加してもスコアは上がらない。
+    df = pd.merge(df, bbox_neighbor_agg, on=["game_play", "step", "nfl_player_id_1"], how="left")
+    df["bbox_y_endzone_diff_from_neighbors_1"] = df["bbox_center_y_Endzone_1"] - df["neighbor_y_mean_1"]
+    df["bbox_y_endzone_diff_from_weighted_neighbors_1"] = df["bbox_center_y_Endzone_1"] - df["neighbor_y_w_mean_1"]
+
+    del df["neighbor_y_mean_1"]
+    del df["neighbor_y_w_mean_1"]
+    return df
+
+

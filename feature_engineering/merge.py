@@ -1,4 +1,4 @@
-from feature_engineering.cnn_feats import add_cnn_features
+from feature_engineering.cnn_feats import add_cnn_features, add_cnn_shift_diff_feature
 from feature_engineering.interpolate_features import interpolate_features
 from feature_engineering.point_set_matching import add_p2p_matching_features
 from feature_engineering.table import (
@@ -44,7 +44,11 @@ def make_features(df, tracking, regist, df_args=None):
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'])
-
+        feature_df = add_cnn_shift_diff_feature(feature_df, columns=[
+            'camaro_pred',
+            'cnn_pred_Sideline',
+            'cnn_pred_Endzone',
+        ])
         feature_df, close_sample_index = select_close_example(feature_df)
 
         feature_df = add_bbox_features(feature_df)
