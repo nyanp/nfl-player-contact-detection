@@ -68,6 +68,8 @@ NON_FEATURE_COLS = [
     "x_position_past5_2",
     "y_position_past5_1",
     "y_position_past5_2",
+    "nfl_player_id_interceptor_1",
+    "nfl_player_id_interceptor_2",
 
     # "orientation_past5_1",
     # "direction_past5_1",
