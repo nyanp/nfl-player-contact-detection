@@ -32,7 +32,7 @@ def get_lgb_params(cfg):
         "objective": "binary",
         "metric": "auc",
         "max_depth": -1,
-        "num_leaves": 48,
+        "num_leaves": 40,
         "verbose": -1,
     }
     if cfg.MODEL_SIZE == ModelSize.SMALL:
@@ -43,7 +43,8 @@ def get_lgb_params(cfg):
         lgb_params["boosting"] = "goss"
     else:
         lgb_params["learning_rate"] = 0.03
-        lgb_params["reg_lambda"] = 1
+        lgb_params["reg_lambda"] = 0.5
+        lgb_params["reg_alpha"] = 1
     return lgb_params
 
 
@@ -260,7 +261,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp026_exp024_add_bbox_atd_features',
+        EXP_NAME='exp028_exp027_lgb_param',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,

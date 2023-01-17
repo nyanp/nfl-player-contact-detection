@@ -84,7 +84,7 @@ def make_features(df, tracking, regist, df_args=None):
         feature_df = add_shift_of_player(feature_df, tracking, [-5, 5], add_diff=True, player_id="2")
         feature_df = add_bbox_std_overlap_feature(feature_df)
         feature_df = add_interceptor_feature(feature_df)
-        feature_df = add_bbox_std_features(feature_df)
+        # feature_df = add_bbox_std_features(feature_df)
     print(feature_df.shape)
     # print(feature_df.columns.tolist())
     return feature_df, close_sample_index
