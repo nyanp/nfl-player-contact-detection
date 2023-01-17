@@ -92,11 +92,11 @@ def train_cv(
 
     with timer("lgb.cv"):
         ret = lgb.cv(lgb_params, ds_train,
-                     num_boost_round=1000,
+                     num_boost_round=3000,
                      folds=split,
                      return_cvbooster=True,
                      callbacks=[
-                         lgb.early_stopping(stopping_rounds=50, verbose=True),
+                         lgb.early_stopping(stopping_rounds=100, verbose=True),
                          lgb.log_evaluation(25),
                          #  wandb_callback()
                      ])
@@ -260,7 +260,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp022_update_kmat0108_no_interpolate_helmet',
+        EXP_NAME='exp026_exp024_add_bbox_atd_features',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,

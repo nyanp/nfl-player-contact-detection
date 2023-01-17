@@ -19,6 +19,11 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None):
     if camaro_df is None:
         camaro_df = pd.read_csv('../pipeline/output/exp048_both_ext_blur_dynamic_normalize_coords_fix_frame_noise/val_df.csv')
 
+    # if camaro_df is None:
+    #     camaro_df = pd.read_csv('../pipeline/output/exp064_exp048_fiix_coords_scale/oof_val_preds_agg_df.csv')
+
+    # camaro_df['masks'] = camaro_df['masks'].fillna(False)
+
     camaro_df['camaro_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
     camaro_df.loc[camaro_df['masks'], 'camaro_pred'] = camaro_df.loc[camaro_df['masks'], 'preds']
     # camaro_df = camaro_df.rename(columns={'preds': 'camaro_pred'})
@@ -26,9 +31,9 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None):
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred']
     df = df.merge(camaro_df[merge_cols], how='left')
 
-    camaro_agg_df = pd.read_csv('../pipeline/output/exp048_both_ext_blur_dynamic_normalize_coords_fix_frame_noise/oof_val_preds_agg_df.csv')
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'preds_max', 'preds_min', 'preds_std', 'preds_mean', 'preds_count']
-    df = df.merge(camaro_agg_df[merge_cols], how='left')
+    # camaro_agg_df = pd.read_csv('../pipeline/output/exp048_both_ext_blur_dynamic_normalize_coords_fix_frame_noise/oof_val_preds_agg_df.csv')
+    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'preds_max', 'preds_min', 'preds_std', 'preds_mean', 'preds_count']
+    # df = df.merge(camaro_agg_df[merge_cols], how='left')
 
     if kmat_end_df is None:
         end_paths = sorted(glob.glob('../input/mfl2cnnkmat0108/output/fold*_cnn_pred_end.csv'))

@@ -690,7 +690,7 @@ if __name__ == "__main__":
         ]
     )
     test_df = add_basic_features(test_df)
-    te_helmets = pd.read_csv('../input/interpolated/interpolated_test_helmets.csv')
+    te_helmets = read_csv_with_cache("test_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
     te_meta = pd.read_csv(os.path.join(cfg.INPUT, "test_video_metadata.csv"),
                           parse_dates=["start_time", "end_time", "snap_time"])
 

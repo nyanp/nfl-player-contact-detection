@@ -626,3 +626,10 @@ def bbox_y_endzone_diff_feature(df, distance_th=3.0):
     return df
 
 
+def add_bbox_std_features(df):
+    for view in ["Sideline", "Endzone"]:
+        # 動画上の距離を動画上のヘルメットサイズの標準スケールで割る
+        std_size = np.sqrt(df[f"height_{view}_mean"] * df[f"width_{view}_mean"])
+        df[f'bbox_center_{view}_distance_std'] = df[f'bbox_center_{view}_distance'] / std_size
+
+    return df
