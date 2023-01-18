@@ -216,20 +216,20 @@ def inference(cfg: Config):
     threshold_2 = serializer.threshold_2
 
     with timer("load file"):
-        te_tracking = read_csv_with_cache(
+        test_tracking = read_csv_with_cache(
             "test_player_tracking.csv", cfg.INPUT, cfg.CACHE, usecols=TRACK_COLS)
 
         sub = read_csv_with_cache("sample_submission.csv", cfg.INPUT, cfg.CACHE)
         test_df = expand_contact_id(sub)
         test_df = pd.merge(test_df,
-                           te_tracking[["step", "game_play", "datetime"]].drop_duplicates(),
+                           test_tracking[["step", "game_play", "datetime"]].drop_duplicates(),
                            on=["game_play", "step"], how="left")
         test_df = expand_helmet(cfg, test_df, "test")
 
         te_helmets = read_csv_with_cache("test_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
         te_meta = pd.read_csv(os.path.join(cfg.INPUT, "test_video_metadata.csv"),
                               parse_dates=["start_time", "end_time", "snap_time"])
-        te_regist = match_p2p_with_cache(os.path.join(cfg.CACHE, "test_registration.f"), tracking=te_tracking, helmets=te_helmets, meta=te_meta)
+        test_regist = match_p2p_with_cache(os.path.join(cfg.CACHE, "test_registration.f"), tracking=test_tracking, helmets=te_helmets, meta=te_meta)
 
         df_args = []
         if cfg.CAMARO_DF_PATH:
@@ -241,21 +241,37 @@ def inference(cfg: Config):
 
     feature_cols = cvbooster.feature_name()[0]
 
-    with timer("make features(test)"):
-        test_feature_df, test_selected_index = make_features(test_df, te_tracking, te_regist, df_args)
+    def _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args):
+        with timer("make features(test)"):
+            game_test_feature_df, test_selected_index = make_features(game_test_df, game_test_tracking, game_test_regist, df_args)
 
-    X_test = encoder.transform(test_feature_df[feature_cols])
-    predicted = cvbooster.predict(X_test)
+        X_test = encoder.transform(game_test_feature_df[feature_cols])
+        predicted = cvbooster.predict(X_test)
 
-    avg_predicted = np.array(predicted).mean(axis=0)
+        avg_predicted = np.array(predicted).mean(axis=0)
 
-    is_ground = test_feature_df["nfl_player_id_2"] == -1
-    pred_binalized = binarize_pred(
-        avg_predicted, threshold_1, threshold_2, is_ground)
+        is_ground = game_test_feature_df["nfl_player_id_2"] == -1
+        pred_binalized = binarize_pred(
+            avg_predicted, threshold_1, threshold_2, is_ground)
 
-    test_df = add_contact_id(test_df)
-    test_df['contact'] = 0
-    test_df.loc[test_selected_index, 'contact'] = pred_binalized.astype(int).values
+        game_test_df = add_contact_id(game_test_df)
+        game_test_df['contact'] = 0
+        game_test_df.loc[test_selected_index, 'contact'] = pred_binalized.astype(int).values
+        # game_test_df[['contact_id', 'contact']].to_csv('submission.csv', index=False)
+        return game_test_df
+
+    game_test_dfs = []
+    game_plays = test_df['game_play'].unique()
+    game_test_gb = test_df.groupby(['game_play'])
+    game_test_tracking_gb = test_tracking.groupby(['game_play'])
+    game_test_regist_gb = test_regist.groupby(['game_play'])
+    for game_play in game_plays:
+        game_test_df = game_test_gb.get_group(game_play)
+        game_test_tracking = game_test_tracking_gb.get_group(game_play)
+        game_test_regist = game_test_regist_gb.get_group(game_play)
+        game_test_df = _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args)
+        game_test_dfs.append(game_test_df)
+    test_df = pd.concat(game_test_dfs).reset_index(drop=True)
     test_df[['contact_id', 'contact']].to_csv('submission.csv', index=False)
 
 
