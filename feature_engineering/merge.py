@@ -29,12 +29,13 @@ def make_features(df, tracking, regist, df_args=None):
             ]
         )
 
-    print(feature_df.shape)
-
     with timer("tracking_agg_features"):
         feature_df = add_basic_features(feature_df)
+        print('after add_basic_features:', feature_df.shape)
         feature_df = add_cnn_features(feature_df, *df_args)
+        print('after add_cnn_features:', feature_df.shape)
         feature_df = add_p2p_matching_features(feature_df, regist)
+        print('after add_p2p_matching_features:', feature_df.shape)
 
         feature_df = interpolate_features(
             feature_df,
@@ -45,6 +46,7 @@ def make_features(df, tracking, regist, df_args=None):
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'])
+        print('after interpolate_features 5:', feature_df.shape)
 
         feature_df = interpolate_features(
             feature_df,
@@ -55,6 +57,7 @@ def make_features(df, tracking, regist, df_args=None):
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'])
+        print('after interpolate_features 11:', feature_df.shape)
 
         feature_df = interpolate_features(
             feature_df,
@@ -65,26 +68,39 @@ def make_features(df, tracking, regist, df_args=None):
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'])
+        print('after interpolate_features 21:', feature_df.shape)
 
         feature_df = add_cnn_shift_diff_feature(feature_df, columns=[
             'camaro_pred',
             'cnn_pred_Sideline',
             'cnn_pred_Endzone',
         ])
+        print('after add_cnn_shift_diff_feature:', feature_df.shape)
         feature_df, close_sample_index = select_close_example(feature_df)
+        print('after select_close_example:', feature_df.shape)
 
         feature_df = add_bbox_features(feature_df)
+        print('after add_bbox_features:', feature_df.shape)
         feature_df = add_step_feature(feature_df, tracking)
+        print('after add_step_feature:', feature_df.shape)
         feature_df = add_tracking_agg_features(feature_df, tracking)
+        print('after add_tracking_agg_features:', feature_df.shape)
         feature_df = add_t0_feature(feature_df, tracking)
+        print('after add_t0_feature:', feature_df.shape)
         feature_df = add_distance_around_player(feature_df)
+        print('after add_distance_around_player:', feature_df.shape)
         feature_df = add_aspect_ratio_feature(feature_df, False)
+        print('after add_aspect_ratio_feature:', feature_df.shape)
         feature_df = add_misc_features_after_agg(feature_df)
+        print('after add_misc_features_after_agg:', feature_df.shape)
         feature_df = add_shift_of_player(feature_df, tracking, [-5, 5, 10], add_diff=True, player_id="1")
+        print('after add_shift_of_player:', feature_df.shape)
         feature_df = add_shift_of_player(feature_df, tracking, [-5, 5], add_diff=True, player_id="2")
+        print('after add_shift_of_player:', feature_df.shape)
         feature_df = add_bbox_std_overlap_feature(feature_df)
+        print('after add_bbox_std_overlap_feature:', feature_df.shape)
         feature_df = add_interceptor_feature(feature_df)
+        print('after add_interceptor_feature:', feature_df.shape)
         # feature_df = add_bbox_std_features(feature_df)
-    print(feature_df.shape)
     # print(feature_df.columns.tolist())
     return feature_df, close_sample_index
