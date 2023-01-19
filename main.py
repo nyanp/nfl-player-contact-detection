@@ -26,7 +26,6 @@ from utils.nfl import (
     TRACK_COLS,
     NON_FEATURE_COLS)
 
-
 def get_lgb_params(cfg):
     lgb_params = {
         "objective": "binary",
@@ -41,10 +40,19 @@ def get_lgb_params(cfg):
     elif cfg.MODEL_SIZE == ModelSize.MEDIUM:
         lgb_params["learning_rate"] = 0.05
         lgb_params["boosting"] = "goss"
-    else:
+    elif cfg.MODEL_SIZE == ModelSize.LARGE:
         lgb_params["learning_rate"] = 0.03
         lgb_params["reg_lambda"] = 0.5
         lgb_params["reg_alpha"] = 1
+    elif cfg.MODEL_SIZE == ModelSize.HUGE:
+        lgb_params["feature_fraction"] = 0.3
+        lgb_params["learning_rate"] = 0.02
+        lgb_params["min_child_samples"] = 10
+        lgb_params["min_child_weight"] = 5
+        lgb_params["num_leaves"] = 128
+        lgb_params["subsample_for_bin"] = 50000
+    else:
+        raise NotImplementedError()
     return lgb_params
 
 
@@ -277,12 +285,12 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp028_exp027_lgb_param',
+        EXP_NAME='exp029_lgb_param_huge',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,
         KMAT_SIDE_DF_PATH=args.kmat_side_path,
-        MODEL_SIZE=ModelSize.LARGE,
+        MODEL_SIZE=ModelSize.HUGE,
         DEBUG=args.debug)
 
     if args.debug:
