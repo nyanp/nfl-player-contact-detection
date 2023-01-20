@@ -17,6 +17,9 @@ python camaro/scripts/preprocess_data_frame.py
 python camaro/scripts/preprocess_data_dict.py
 python camaro/scripts/save_jpeg_images.py
 
+# install
+pip install -r camaro_requirements.txt
+
 # run
 python camaro_main.py --config_path camaro.configs.exp048
 ```
