@@ -242,10 +242,10 @@ def inference(cfg: Config):
         df_args = []
         if cfg.CAMARO_DF_PATH:
             df_args.append(pd.read_csv(cfg.CAMARO_DF_PATH))
-        if cfg.KMAT_END_DF_PATH:
-            df_args.append(pd.read_csv(cfg.KMAT_END_DF_PATH))
-        if cfg.KMAT_SIDE_DF_PATH:
-            df_args.append(pd.read_csv(cfg.KMAT_SIDE_DF_PATH))
+        # if cfg.KMAT_END_DF_PATH:
+        #     df_args.append(pd.read_csv(cfg.KMAT_END_DF_PATH))
+        # if cfg.KMAT_SIDE_DF_PATH:
+        #     df_args.append(pd.read_csv(cfg.KMAT_SIDE_DF_PATH))
 
     feature_cols = cvbooster.feature_name()[0]
 
@@ -289,7 +289,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp029_lgb_param_huge',
+        EXP_NAME='exp030_lgb_param_huge_no_kmat',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,

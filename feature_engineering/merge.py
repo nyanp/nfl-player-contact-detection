@@ -42,8 +42,8 @@ def make_features(df, tracking, regist, df_args=None):
             window_size=5,
             columns_to_roll=[
                 'camaro_pred',
-                'cnn_pred_Sideline',
-                'cnn_pred_Endzone',
+                # 'cnn_pred_Sideline',
+                # 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'])
         print('after interpolate_features 5:', feature_df.shape)
@@ -53,8 +53,8 @@ def make_features(df, tracking, regist, df_args=None):
             window_size=11,
             columns_to_roll=[
                 'camaro_pred',
-                'cnn_pred_Sideline',
-                'cnn_pred_Endzone',
+                # 'cnn_pred_Sideline',
+                # 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'])
         print('after interpolate_features 11:', feature_df.shape)
@@ -64,16 +64,16 @@ def make_features(df, tracking, regist, df_args=None):
             window_size=21,
             columns_to_roll=[
                 'camaro_pred',
-                'cnn_pred_Sideline',
-                'cnn_pred_Endzone',
+                # 'cnn_pred_Sideline',
+                # 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'])
         print('after interpolate_features 21:', feature_df.shape)
 
         feature_df = add_cnn_shift_diff_feature(feature_df, columns=[
             'camaro_pred',
-            'cnn_pred_Sideline',
-            'cnn_pred_Endzone',
+            # 'cnn_pred_Sideline',
+            # 'cnn_pred_Endzone',
         ])
         print('after add_cnn_shift_diff_feature:', feature_df.shape)
         feature_df, close_sample_index = select_close_example(feature_df)
