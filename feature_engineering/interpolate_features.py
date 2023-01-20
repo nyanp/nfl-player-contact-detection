@@ -65,7 +65,7 @@ def _interpolate_game_play_features(args):
     return game_play_df[keep_cols]
 
 
-def interpolate_features(df, window_size=11, columns_to_roll=['cnn_pred_Sideline', 'cnn_pred_Endzone']):
+def interpolate_features(df, window_size=11, columns_to_roll=['cnn_pred_Sideline', 'cnn_pred_Endzone'], enable_multiprocess=True):
     """
     game_play, pair(player1, player2), でstep方向にroll (現状average。ガウス重みがベター？)とる。
     画像系特徴の 予測欠損補間が主目的。特にGround接触時はヘルメットが隠れやすく、画像からの予測が存在しないところがあるはず。
@@ -73,11 +73,16 @@ def interpolate_features(df, window_size=11, columns_to_roll=['cnn_pred_Sideline
     inputs_list = [(game_play_df, window_size, columns_to_roll) for _, game_play_df in df.groupby("game_play")]
 
     rolled_dfs = []
-    pool = Pool(processes=cpu_count())
-    with tqdm(total=len(inputs_list)) as t:
-        for rolled_df in pool.imap_unordered(_interpolate_game_play_features, inputs_list):
+    if enable_multiprocess:
+        pool = Pool(processes=cpu_count())
+        with tqdm(total=len(inputs_list)) as t:
+            for rolled_df in pool.imap_unordered(_interpolate_game_play_features, inputs_list):
+                rolled_dfs.append(rolled_df)
+                t.update(1)
+    else:
+        for inputs in inputs_list:
+            rolled_df = _interpolate_game_play_features(inputs)
             rolled_dfs.append(rolled_df)
-            t.update(1)
     rolled_dfs = pd.concat(rolled_dfs, axis=0).reset_index(drop=True)
     df = pd.merge(df, rolled_dfs, how="left", on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"])
     return df

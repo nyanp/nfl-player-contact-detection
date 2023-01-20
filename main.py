@@ -26,6 +26,7 @@ from utils.nfl import (
     TRACK_COLS,
     NON_FEATURE_COLS)
 
+
 def get_lgb_params(cfg):
     lgb_params = {
         "objective": "binary",
@@ -251,10 +252,14 @@ def inference(cfg: Config):
 
     def _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args):
         with timer("make features(test)"):
-            game_test_feature_df, test_selected_index = make_features(game_test_df, game_test_tracking, game_test_regist, df_args)
+            game_test_feature_df, test_selected_index = make_features(
+                game_test_df, game_test_tracking, game_test_regist, df_args, cfg.ENABLE_MULTIPROCESS)
 
         X_test = encoder.transform(game_test_feature_df[feature_cols])
         predicted = cvbooster.predict(X_test)
+
+        del X_test
+        gc.collect()
 
         avg_predicted = np.array(predicted).mean(axis=0)
 
@@ -279,18 +284,20 @@ def inference(cfg: Config):
         game_test_regist = game_test_regist_gb.get_group(game_play)
         game_test_df = _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args)
         game_test_dfs.append(game_test_df)
+        gc.collect()
     test_df = pd.concat(game_test_dfs).reset_index(drop=True)
     test_df[['contact_id', 'contact']].to_csv('submission.csv', index=False)
 
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp029_lgb_param_huge',
+        EXP_NAME='exp031_lgb_param_huge_camaro076_079',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,
         KMAT_SIDE_DF_PATH=args.kmat_side_path,
         MODEL_SIZE=ModelSize.HUGE,
+        ENABLE_MULTIPROCESS=args.enable_multiprocess,
         DEBUG=args.debug)
 
     if args.debug:
@@ -310,6 +317,7 @@ def parse_args():
     parser.add_argument("--camaro_path", "-c", default="", type=str)
     parser.add_argument("--kmat_end_path", "-e", default="", type=str)
     parser.add_argument("--kmat_side_path", "-s", default="", type=str)
+    parser.add_argument("--enable_multiprocess", "-m", default=True, type=bool)
     return parser.parse_args()
 
 

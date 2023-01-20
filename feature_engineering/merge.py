@@ -11,7 +11,7 @@ from utils.general import timer
 from utils.nfl import merge_tracking
 
 
-def make_features(df, tracking, regist, df_args=None):
+def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
     if df_args is None:
         df_args = []
     with timer("merge"):
@@ -41,33 +41,40 @@ def make_features(df, tracking, regist, df_args=None):
             window_size=5,
             columns_to_roll=[
                 'camaro_pred',
+                'camaro_pred2',
                 'cnn_pred_Sideline',
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
-                'y_rel_position_offset_on_img_Side'])
+                'y_rel_position_offset_on_img_Side'],
+            enable_multiprocess=enable_multiprocess)
 
         feature_df = interpolate_features(
             feature_df,
             window_size=11,
             columns_to_roll=[
                 'camaro_pred',
+                'camaro_pred2',
                 'cnn_pred_Sideline',
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
-                'y_rel_position_offset_on_img_Side'])
+                'y_rel_position_offset_on_img_Side'],
+            enable_multiprocess=enable_multiprocess)
 
         feature_df = interpolate_features(
             feature_df,
             window_size=21,
             columns_to_roll=[
                 'camaro_pred',
+                'camaro_pred2',
                 'cnn_pred_Sideline',
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
-                'y_rel_position_offset_on_img_Side'])
+                'y_rel_position_offset_on_img_Side'],
+            enable_multiprocess=enable_multiprocess)
 
         feature_df = add_cnn_shift_diff_feature(feature_df, columns=[
             'camaro_pred',
+            'camaro_pred2',
             'cnn_pred_Sideline',
             'cnn_pred_Endzone',
         ])

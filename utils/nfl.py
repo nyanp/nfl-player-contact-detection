@@ -97,6 +97,7 @@ class Config:
     SPLIT_FILE_PATH: str = "../input/game_fold.csv"
     MODEL_SIZE: ModelSize = ModelSize.LARGE
     DEBUG: bool = False
+    ENABLE_MULTIPROCESS: bool = False
     CAMARO_DF_PATH: Optional[str] = None
     KMAT_END_DF_PATH: Optional[str] = None
     KMAT_SIDE_DF_PATH: Optional[str] = None
