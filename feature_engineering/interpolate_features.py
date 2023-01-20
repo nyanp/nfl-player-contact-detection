@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
+
 class PairRollHolder:
     def __init__(self, window_size, all_players):
         self.window_size = window_size
