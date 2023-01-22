@@ -633,3 +633,47 @@ def add_bbox_std_features(df):
         df[f'bbox_center_{view}_distance_std'] = df[f'bbox_center_{view}_distance'] / std_size
 
     return df
+
+
+def add_image_coords_features(df):
+    IMG_HEIGHT, IMG_WIDTH = 720, 1280
+
+    img_coords_file = "../input/mfl2cnnkmat0121/output/p2p_registration_residuals_img_coords.csv"
+    df_img_coords = pd.read_csv(img_coords_file)
+
+    df_img_coords['inside_img'] = (
+        df_img_coords['img_coords_x'] > 0) & (
+        df_img_coords['img_coords_x'] < IMG_WIDTH) & (
+            df_img_coords['img_coords_y'] > 0) & (
+                df_img_coords['img_coords_y'] < IMG_HEIGHT)
+    end_df_img_coords = df_img_coords.query('view == "Endzone"').rename(
+        columns={
+            'inside_img': 'inside_end_img',
+            'img_coords_x': 'end_img_coords_x',
+            'img_coords_y': 'end_img_coords_y'})
+    side_df_img_coords = df_img_coords.query('view == "Sideline"').rename(
+        columns={
+            'inside_img': 'inside_side_img',
+            'img_coords_x': 'side_img_coords_x',
+            'img_coords_y': 'side_img_coords_y'})
+    df_img_coords = end_df_img_coords.drop(['view', 'frame'], axis=1).merge(
+        side_df_img_coords.drop(['view', 'frame'], axis=1), on=['game_play', 'step', 'nfl_player_id'])
+
+    merge_cols = ['end_img_coords_x', 'end_img_coords_y', 'inside_end_img', 'side_img_coords_x', 'side_img_coords_y', 'inside_side_img']
+    df = df.merge(df_img_coords.rename(columns={'nfl_player_id': 'nfl_player_id_1'}), on=['game_play', 'step', 'nfl_player_id_1'], how='left', )
+    df = df.rename(columns={k: 'p1_' + k for k in merge_cols})
+
+    df = df.merge(df_img_coords.rename(columns={'nfl_player_id': 'nfl_player_id_2'}), on=['game_play', 'step', 'nfl_player_id_2'], how='left', )
+    df = df.rename(columns={k: 'p2_' + k for k in merge_cols})
+
+    df['side_img_distance'] = distance(
+        df['p1_side_img_coords_x'].values,
+        df['p1_side_img_coords_y'].values,
+        df['p2_side_img_coords_x'].values,
+        df['p2_side_img_coords_y'].values)
+    df['end_img_distance'] = distance(
+        df['p1_end_img_coords_x'].values,
+        df['p1_end_img_coords_y'].values,
+        df['p2_end_img_coords_x'].values,
+        df['p2_end_img_coords_y'].values)
+    return df
