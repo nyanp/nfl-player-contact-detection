@@ -3,7 +3,7 @@ from feature_engineering.interpolate_features import interpolate_features
 from feature_engineering.point_set_matching import add_p2p_matching_features
 from feature_engineering.table import (
     add_aspect_ratio_feature, add_basic_features, add_bbox_features, add_bbox_std_features, add_bbox_std_overlap_feature,
-    add_distance_around_player, add_interceptor_feature,
+    add_distance_around_player, add_image_coords_features, add_interceptor_feature,
     add_misc_features_after_agg, add_shift_of_player, add_step_feature,
     add_t0_feature, add_tracking_agg_features, select_close_example,
     tracking_prep)
@@ -91,6 +91,7 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
         feature_df = add_shift_of_player(feature_df, tracking, [-5, 5], add_diff=True, player_id="2")
         feature_df = add_bbox_std_overlap_feature(feature_df)
         feature_df = add_interceptor_feature(feature_df)
+        feature_df = add_image_coords_features(feature_df)
         # feature_df = add_bbox_std_features(feature_df)
     print(feature_df.shape)
     # print(feature_df.columns.tolist())
