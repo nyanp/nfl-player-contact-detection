@@ -39,11 +39,11 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
     # df = df.merge(camaro_agg_df[merge_cols], how='left')
 
     if kmat_end_df is None:
-        end_paths = sorted(glob.glob('../input/mfl2cnnkmat0108/output/fold*_cnn_pred_end.csv'))
+        end_paths = sorted(glob.glob('../input/mfl2cnnkmat0121/output/fold*_cnn_pred_end.csv'))
         kmat_end_df = pd.concat([pd.read_csv(p) for p in end_paths]).reset_index(drop=True)
 
     if kmat_side_df is None:
-        side_paths = sorted(glob.glob('../input/mfl2cnnkmat0108/output/fold*_cnn_pred_side.csv'))
+        side_paths = sorted(glob.glob('../input/mfl2cnnkmat0121/output/fold*_cnn_pred_side.csv'))
         kmat_side_df = pd.concat([pd.read_csv(p) for p in side_paths]).reset_index(drop=True)
 
     kmat_end_df['step'] = kmat_end_df['step'].astype(int)
