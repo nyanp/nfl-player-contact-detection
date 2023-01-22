@@ -35,12 +35,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 #import cv2
 #import mlflow
+import tensorflow_addons as tfa
 
 from train_utils.tf_Augmentations_detection import Compose, Oneof, HorizontalFlip, VerticalFlip, Crop, Center_Crop, Resize, BrightnessContrast, CoarseDropout, HueShift, ToGlay, Blur, PertialBrightnessContrast, Shadow, GaussianNoise, Rotation
 from train_utils.tf_Augmentations_detection import Center_Crop_by_box_shape, Crop_by_box_shape
 from train_utils.scheduler import lrs_wrapper, lrs_wrapper_cos
 from train_utils.dataloader import load_dataset, get_tf_dataset_gcn, preprop_inference
-from model.model_gnn import build_gcn, build_gcn_1dcnn, build_dense
+from model.model_gnn import build_gcn, build_gcn_1dcnn, build_dense, build_occupancy_1dcnn
 from model.model import matthews_correlation_fixed, matthews_correlation_best
 
 
@@ -68,13 +69,15 @@ class NFLGNN():
     def load_model(self, weight_file=None, is_train_model=False):
         """build model and load weights"""
         #self.model, self.losses, self.loss_weights, self.metrics = build_gcn(self.num_players, self.num_input_feature, self.num_adj)
-        self.model, self.losses, self.loss_weights, self.metrics = build_gcn_1dcnn(self.num_players, self.num_input_feature, self.num_adj)
+        self.model, self.losses, self.loss_weights, self.metrics = build_occupancy_1dcnn(self.num_players, self.num_input_feature, self.num_adj,
+                                                                                         player_size_yard=3)
         #self.model, self.losses, self.loss_weights, self.metrics = build_dense(self.num_players, self.num_input_feature, self.num_adj)
         if not weight_file is None:
             self.model.load_weights(weight_file)#, by_name=True, skip_mismatch=True)
             self.model.trainable=False
         if not is_train_model:
             self.tf_model = tf.function(lambda x: self.model(x))
+            self.names_of_model_inputs = [inp.name for inp in self.model.input]
 
     def train(self, train_dataset, val_dataset, save_dir, num_data, 
               learning_rate=0.002, n_epoch=150, batch_size=32, 
@@ -96,6 +99,7 @@ class NFLGNN():
         
                 
         optim = Adam(lr=learning_rate, clipnorm=0.001)
+        optim = tfa.optimizers.MovingAverage(optim)
         self.model.compile(loss = self.losses,
                            loss_weights = self.loss_weights, 
                            metrics = self.metrics,
@@ -105,18 +109,80 @@ class NFLGNN():
         
         """
         # test run
+
         tfd = get_tf_dataset_gcn(train_dataset, 
-                                 batch_size=batch_size, 
+                                 batch_size=1, 
                                  sequence_length=self.sequence_length,
                                  num_players=self.num_players,
                                  is_train=True,)
-        for inp, targ in tfd.take(5):
+        for inp, targ in tfd.take(2):
             #print("run model")
             print("FFFFFFFFFFFFFFFF")
-            print(inp["input_features"])
+            #for k,val in inp.items():
+            #    print(k,val.shape)
+            #    print(val)
+            #    print("-"*20)
+            print(inp["input_orientations"][0,-1])
+            print(inp["input_positions"][0,-1])
             print("AAAAAAAAAAAAAA")
             #print(inp["input_adjacency_matrix"])
-            print(self.model(inp))
+            binary, p, shift = self.model(inp)
+            
+            for i in range(0,20,2):
+                plt.imshow(p[0,i,i,:,:,0])
+                plt.title(inp["input_orientations"][0,-1,i].numpy())
+                plt.hlines(y=32, xmin=10, xmax=54, colors="black", linestyles="dotted")
+                plt.vlines(x=32, ymin=10, ymax=54, colors="black", linestyles="dotted")
+                plt.show()
+            continue
+            idx1 = 3
+            idx2 = 4
+            idx3 = 8
+            #print(pdf.shape)
+            plt.imshow(p[0,0,0,:,:,0])
+            #plt.title(f"00_{p[0,0,0,:,:,0].numpy().max(), binary[0,0,0].numpy(), pdf[0,0,0].numpy()[0]}")
+            plt.show()
+            plt.imshow(p[0,idx1,idx1,:,:,0])
+            #plt.title(f"00_{p[0,0,0,:,:,0].numpy().max(), binary[0,0,0].numpy(), pdf[0,0,0].numpy()[0]}")
+            plt.show()
+            plt.imshow(p[0,idx2,idx2,:,:,0])
+            #plt.title(f"00_{p[0,0,0,:,:,0].numpy().max(), binary[0,0,0].numpy(), pdf[0,0,0].numpy()[0]}")
+            plt.show()
+            
+            plt.imshow(p[0,idx2+10,idx2+10,:,:,0])
+            #plt.title(f"00_{p[0,0,0,:,:,0].numpy().max(), binary[0,0,0].numpy(), pdf[0,0,0].numpy()[0]}")
+            plt.show()
+            
+            plt.imshow(p[0,idx2+10,idx2+10,:,:,0])
+            #plt.title(f"00_{p[0,0,0,:,:,0].numpy().max(), binary[0,0,0].numpy(), pdf[0,0,0].numpy()[0]}")
+            plt.show()
+            
+            
+            plt.imshow(shift[0,idx1,idx2,:,:,0])
+            #plt.title(f"01_{p[0,idx1,idx2,:,:,0].numpy().max(), binary[0,idx1,idx2].numpy(), pdf[0,idx1,idx2].numpy()}")
+            plt.show()
+            
+            plt.imshow(p[0,idx1,idx2,:,:,0])
+            #plt.title(f"01_{p[0,idx1,idx2,:,:,0].numpy().max(), binary[0,idx1,idx2].numpy(), pdf[0,idx1,idx2].numpy()}")
+            plt.show()
+            
+            plt.imshow(shift[0,idx2,idx1,:,:,0])
+            #plt.title(f"01_{p[0,idx1,idx2,:,:,0].numpy().max(), binary[0,idx1,idx2].numpy(), pdf[0,idx1,idx2].numpy()}")
+            plt.show()
+            
+            plt.imshow(p[0,idx2,idx1,:,:,0])
+            #plt.title(f"10_{p[0,idx2,idx1,:,:,0].numpy().max(), binary[0,idx2,idx1].numpy(), pdf[0,idx2,idx1].numpy()}")
+            plt.show()
+            plt.imshow(p[0,idx2,idx3,:,:,0])
+            #plt.title(f"12_{p[0,idx2,idx3,:,:,0].numpy().max(), binary[0,idx2,idx3].numpy(), pdf[0,idx2,idx3].numpy()}")
+            plt.show()
+            #print(p)
+            print()
+            print(p.shape)
+            #plt.hist(p.numpy().flatten())
+            #plt.show()
+            
+            
             #print(targ)
             #print(tf.math.reduce_std(inp["input_rgb"][...,3:], axis=[0,1,2]))
             #print(tf.reduce_max(inp["input_rgb"][...,3:], axis=[0,1,2]))
@@ -162,11 +228,28 @@ class NFLGNN():
         pd.DataFrame(self.hist.history).to_csv(csv_hist, index=False)
         print("Done")
     
-    def predict(self, player_3d_num_matrix,adj_matrix, step_range):
-        inputs = [player_3d_num_matrix,adj_matrix, step_range]
-        preds = self.tf_model(inputs)
+    def predict(self, inputs_dict):
+        #inputs = [player_3d_num_matrix,adj_matrix, step_range]
+        preds = self.tf_model([inputs_dict[k] for k in self.names_of_model_inputs])
         return preds
-    
+
+    def batch_predict(self, inputs_dict, batch_size=8):
+        #inputs = [player_3d_num_matrix,adj_matrix, step_range]
+        outputs = []
+        s = 0
+        fin = tf.shape(inputs_dict["input_features"])[0].numpy()
+        while True:
+            e = min(s + batch_size, fin)
+            preds = self.tf_model([inputs_dict[k][s:e] for k in self.names_of_model_inputs])
+            if len(outputs)==0:
+                outputs = [[p] for p in preds]
+            else:
+                outputs = [o+[p] for o,p in zip(outputs, preds)]
+            s = e
+            if e==fin:
+                break
+        
+        return [tf.concat(o, axis=0) for o in outputs]    
         
 def set_seeds(num=111):
     tf.random.set_seed(num)
@@ -200,8 +283,10 @@ def run_training_main(epochs=20,
     game_names = [int(os.path.basename(p).split("_",1)[0]) for p in path_all_gameplay]
     print("ALL", len(game_names))
     fold_info = pd.read_csv(FOLD_PATH)
-    fold_01_game = fold_info.loc[np.logical_or(fold_info["fold"]==0, fold_info["fold"]==1), "game"].values
-    fold_23_game = fold_info.loc[np.logical_or(fold_info["fold"]==2, fold_info["fold"]==3), "game"].values
+    # fold_01_game = fold_info.loc[np.logical_or(fold_info["fold"]==0, fold_info["fold"]==1), "game"].values
+    fold_01_game = fold_info.loc[np.logical_or(fold_info["fold"]==2, np.logical_or(fold_info["fold"]==0, fold_info["fold"]==1)), "game"].values
+    # fold_23_game = fold_info.loc[np.logical_or(fold_info["fold"]==2, fold_info["fold"]==3), "game"].values
+    fold_23_game = fold_info.loc[fold_info["fold"]==3, "game"].values
     mask_fold_01 = [name in fold_01_game for name in game_names]
     mask_fold_23 = [name in fold_23_game for name in game_names]
     path_fold_01 = list(np.array(path_all_gameplay)[mask_fold_01])# + list(np.array(side_path)[mask_fold_01])
@@ -270,7 +355,7 @@ def run_training_main(epochs=20,
     nfl.train(**train_params)      
 
 def run_validation_predict(load_path,
-                           num_players=22, 
+                           num_default_players=22, 
                            num_input_feature=8, 
                            num_adj=2,
                            sequence_length=7,
@@ -309,7 +394,7 @@ def run_validation_predict(load_path,
     val_dataset = load_dataset(val_path, gcn_model=True)[:]
     val_game_plays = [os.path.basename(p) for p in val_path][:]
     
-    model_params = {"num_players": num_players,
+    model_params = {"num_players": num_default_players,
                     "num_input_feature": num_input_feature,  
                     "sequence_length": sequence_length,
                     "num_adj": num_adj,
@@ -373,20 +458,25 @@ def run_validation_predict(load_path,
     """
     
     
-    for i, [game_play, data] in enumerate(zip(val_game_plays, val_dataset)):#.take(1000):
+    for i, [game_play, data] in enumerate(zip(val_game_plays[:], val_dataset[:])):#.take(1000):
         print("\r----- running {}/{} -----".format(i+1, len(val_dataset)), end="")
-        preprocessed = preprop_inference(data)
-        inp = [preprocessed["player_3d_num_matrix"], preprocessed["adj_matrix"], preprocessed["step_range_norm"][...,tf.newaxis]]
-        pred_g, pred_p = nfl.predict(*inp)
+        preprocessed, inp = preprop_inference(data, sequence_length=sequence_length, num_default_player=num_default_players)
+        #inp = [preprocessed["player_3d_num_matrix"], preprocessed["adj_matrix"], preprocessed["step_range_norm"][...,tf.newaxis]]
+        preds = nfl.batch_predict(inp, batch_size=4)
+        p_contact, p_sim_contact, adj_contact, _, _ = preds
         
         num_players = int(preprocessed["num_players"])
-        steps = np.stack([data["step_range"].numpy()] * (num_players + 1) * num_players, axis=-1)
-        pred_g = pred_g[:,:,:num_players].numpy().reshape(-1, 1, num_players)
-        pred_p = pred_p[:,:,:num_players, :num_players].numpy().reshape(-1, num_players, num_players)
-        pred_all = np.concatenate([pred_g, pred_p], axis=1)
-        num_total_steps = pred_all.shape[0]
-        player_1 = np.concatenate([preprocessed["unique_players"]] * (num_players + 1), axis=0)
-        player_2 = np.stack([np.pad(preprocessed["unique_players"], [[1,0]])] * num_players).T.flatten()
+        #steps = np.stack([data["step_range"].numpy()] * (num_players + 1) * num_players, axis=-1)
+        #steps = np.stack([data["step_range"].numpy()] * (num_players + 1) * num_players, axis=-1)
+        steps = np.stack([preprocessed["step"].numpy()] * (num_players) * num_players, axis=-1)
+        # pred_g = pred_g[:,:,:num_players].numpy().reshape(-1, 1, num_players)
+        p_contact = p_contact[:,:num_players, :num_players].numpy().reshape(-1, num_players, num_players)
+        p_sim_contact = p_sim_contact[:,:num_players, :num_players].numpy().reshape(-1, num_players, num_players)
+        adj_contact = adj_contact[:,:num_players, :num_players].numpy().reshape(-1, num_players, num_players)
+        #pred_all = np.concatenate([pred_g, pred_p], axis=1)
+        num_total_steps = p_contact.shape[0]
+        player_1 = np.concatenate([preprocessed["unique_players"]] * num_players, axis=0)
+        player_2 = np.stack([preprocessed["unique_players"]] * num_players).T.flatten()
         player_1 = np.tile(player_1[tf.newaxis, :], [num_total_steps, 1])
         player_2 = np.tile(player_2[tf.newaxis, :], [num_total_steps, 1])
         
@@ -397,24 +487,28 @@ def run_validation_predict(load_path,
         output_df = pd.DataFrame(steps.flatten(), columns=["step"])
         output_df["nfl_player_id_1"] = player_1.flatten()
         output_df["nfl_player_id_2"] = player_2.flatten()
-        output_df["pred_1dcnn"] = pred_all.flatten()
+        output_df["pred_1dcnn_occ"] = p_contact.flatten()
+        output_df["pred_1dcnn_psim"] = p_sim_contact.flatten()
+        output_df["pred_1dcnn_total"] = adj_contact.flatten()
         output_df["game_play"] = game_play
-        output_df = output_df.groupby(["game_play","step","nfl_player_id_1","nfl_player_id_2"])["pred_1dcnn"].mean().reset_index()
+        #print(output_df.shape)
+        #output_df = output_df.groupby(["game_play","step","nfl_player_id_1","nfl_player_id_2"])["pred_1dcnn_total"].mean().reset_index()
+        #print(output_df.shape)
         
         all_outputs.append(output_df)
         
         show_results = False
         if show_results:
-            label_p = data["label_p_contact"].numpy().reshape(-1, num_players, num_players)
-            label_g = data["label_g_contact"].numpy().reshape(-1, 1, num_players)
+            label_p = preprocessed["label_p_contact"].numpy().reshape(-1, num_players, num_players)
+            #label_g = data["label_g_contact"].numpy().reshape(-1, 1, num_players)
             #raise Exception()
-            label_all = np.concatenate([label_g,label_p], axis=1).reshape(-1)
+            #label_all = np.concatenate([label_g,label_p], axis=1).reshape(-1)
             
             print("P------------")
             #gt = (label_p.reshape(-1)>0.5).astype(float)
             #pr = pred_p.flatten()
             gt = label_p.reshape(-1)[label_p.reshape(-1)>-0.5]#label_p * (label_p.reshape(-1)>-0.5).astype(float)
-            pr = pred_p.flatten()[label_p.reshape(-1)>-0.5]
+            pr = p_contact.flatten()[label_p.reshape(-1)>-0.5]
             
             
             tf_gt_labels = tf.cast(np.array(gt), tf.float32)
@@ -422,16 +516,16 @@ def run_validation_predict(load_path,
             for th in np.linspace(0.1, 0.9, 9):
                 print(th, matthews_correlation_fixed(tf_gt_labels, tf_predicted_labels, threshold=th))
             
-            print("G------------")
+            #print("G------------")
             #gt = (label_g.reshape(-1)>0.5).astype(float)
             #pr = pred_g.flatten()
-            gt = label_g.reshape(-1)[label_g.reshape(-1)>-0.5]#label_p * (label_p.reshape(-1)>-0.5).astype(float)
-            pr = pred_g.flatten()[label_g.reshape(-1)>-0.5]
+            #gt = label_g.reshape(-1)[label_g.reshape(-1)>-0.5]#label_p * (label_p.reshape(-1)>-0.5).astype(float)
+            #pr = pred_g.flatten()[label_g.reshape(-1)>-0.5]
             
-            tf_gt_labels = tf.cast(np.array(gt), tf.float32)
-            tf_predicted_labels = tf.cast(pr.flatten()[:len(gt)], tf.float32)
-            for th in np.linspace(0.1, 0.9, 9):
-                print(th, matthews_correlation_fixed(tf_gt_labels, tf_predicted_labels, threshold=th))
+            #tf_gt_labels = tf.cast(np.array(gt), tf.float32)
+            #tf_predicted_labels = tf.cast(pr.flatten()[:len(gt)], tf.float32)
+            #for th in np.linspace(0.1, 0.9, 9):
+            #    print(th, matthews_correlation_fixed(tf_gt_labels, tf_predicted_labels, threshold=th))
             
             
         
@@ -520,6 +614,12 @@ def run_validation_predict(load_path,
 グランドコンタクトとコンタクトマップ別でもいいかも？
 
 """
+# 2yard
+
+# 2yard rot
+
+# 推論対象を中央フレームに
+
 if __name__=="__main__":
     """
     parser = argparse.ArgumentParser()
@@ -530,7 +630,7 @@ if __name__=="__main__":
     batch_rate = args.batch_rate
     """
     DEBUG = False
-    num_epoch =  2 if DEBUG else 30
+    num_epoch =  2 if DEBUG else 20*2
 
     setting_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),"SETTINGS.json")
     DIRS = json.load(open(setting_file))
@@ -556,60 +656,29 @@ if __name__=="__main__":
     else:
         NAME = "fold23"
         
-    run_train = False
+    run_train = True
     if run_train:
         #CROP_SHAPE=(432, 768, 3)
-        save_path = os.path.join(WEIGHT_DIR, f"ex002_gnn_run003_{NAME}train_1dcnn/")
+        save_path = os.path.join(WEIGHT_DIR, f"ex003_occupancy_run012_{NAME}train_1dcnn_3yard_crot_centerframe_9steps/")
         run_training_main(epochs=int(num_epoch*1.2), 
-                              batch_size=int(64/4),
+                              batch_size=int(64/16),#4
                               num_players=22, 
                               num_input_feature=8, 
                               num_adj=2+8,
                               sequence_length=18, #18
                               learning_ratio=0.0075,
-                         load_path=None,#save_path+"final_weights.h5",#os.path.join(WEIGHT_DIR, "map_model_final_weights.h5"),
+                         load_path=None,#os.path.join(WEIGHT_DIR, f"ex003_occupancy_run006_fold01train_1dcnn_3yard_crot_centerframe_concat_nopp_32feat/final_weights.h5"),#save_path+"final_weights.h5",#os.path.join(WEIGHT_DIR, "map_model_final_weights.h5"),
                          save_path=save_path)
         
     else:
         # ex000_contdet_run015_fold01train_fixed_size
         # ex000_contdet_run016_fold01train_not_fixed_size
-        run_validation_predict(os.path.join(WEIGHT_DIR, f"ex002_gnn_run002_{NAME}train_1dcnn/final_weights.h5"),
-                                   num_players=22, 
+        run_validation_predict(os.path.join(WEIGHT_DIR, f"ex003_occupancy_run011_{NAME}train_1dcnn_3yard_crot_centerframe_concat_nopp_32feat_w_adj1d_takusan_re/final_weights.h5"),
+                                   num_default_players=22, 
                                    num_input_feature=8, 
                                    num_adj=2+8,
-                                   sequence_length=18,
+                                   sequence_length=18//2,
                                    save_csv=f"output/pred_1dcnn_{NAME}.csv")
     
     
     
-    """
-    VAL23 = False
-    if VAL23:
-        name = "fold01"
-    else:
-        name = "fold23"
-    run_train = True
-    AUTO_RESIZE = False
-    if run_train:
-        FIXED_SIZE_DETECTION = False
-        save_path = os.path.join(WEIGHT_DIR, f"ex000_contdet_run019_{name}train_fixed_size_retry/")
-        run_training_main(epochs=num_epoch, 
-                          batch_size=int(8),#int(12), 
-                         #input_shape=(512+64, 896+128, 3),#(384, 640, 3), 
-                         #output_shape=(256+32, 448+64),
-                         input_shape=(512, 896, 3),#(384, 640, 3), 
-                         output_shape=(256, 448),
-                         #(192, 320), 
-                         load_path=None,#os.path.join(WEIGHT_DIR, "ex000_contdet_run010_120videos_w_flow/final_weights.h5"),
-                         save_path=save_path)
-    
-    else:
-        # ex000_contdet_run015_fold01train_fixed_size
-        # ex000_contdet_run016_fold01train_not_fixed_size
-        run_validation_predict(os.path.join(WEIGHT_DIR, "ex000_contdet_run015_fold01train_fixed_size/final_weights.h5"),
-                                   input_shape=(704, 1280, 3), 
-                                   output_shape=(352, 640),
-                                   draw_pred=False)
-    
-    
-    """

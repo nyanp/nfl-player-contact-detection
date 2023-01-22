@@ -51,7 +51,7 @@ def compute_distance(df, tr_tracking, merge_col="datetime"):
     )
     return df_combo
 
-def join_helmets_contact(game_play, labels, helmets, meta, view="Sideline", fps=59.94):
+def join_helmets_contact(game_play, labels, helmets, meta, view="Sideline", fps=59.94, only_center_of_step=False):
     """
     Joins helmets and labels for a given game_play. Results can be used for visualizing labels.
     Returns a dataframe with the joint dataframe, duplicating rows if multiple contacts occur.
@@ -73,25 +73,30 @@ def join_helmets_contact(game_play, labels, helmets, meta, view="Sideline", fps=
         .values
     )
     gp_helms["datetime_ngs"] = pd.to_datetime(gp_helms["datetime_ngs"], utc=True)
+    gp_helms["delta_from_round_val"] = (gp_helms["datetime"] - gp_helms["datetime_ngs"]).dt.total_seconds()
 
     gp_labs["datetime_ngs"] = pd.to_datetime(gp_labs["datetime"], utc=True)
 
     gp = gp_helms.merge(
         gp_labs[
             #["datetime_ngs", "nfl_player_id_1", "nfl_player_id_2", "contact_id"]
-            ["datetime_ngs", "nfl_player_id_1", "nfl_player_id_2", "contact"]
+            ["datetime_ngs", "nfl_player_id_1", "nfl_player_id_2", "contact", "step"]
         ],
         left_on=["datetime_ngs", "nfl_player_id"],
         right_on=["datetime_ngs", "nfl_player_id_1"],
         how="left",
     )
-
+    
+    gp["center_frame_of_step"] = np.abs(gp["delta_from_round_val"]) 
+    gp["center_frame_of_step"] = gp["center_frame_of_step"].values==gp.groupby("datetime_ngs")["center_frame_of_step"].transform("min").values
+    if only_center_of_step:
+        gp = gp[gp["center_frame_of_step"]]#.drop(columns=["center_frame_of_step"])
     return gp
 
 
-def make_annotation_file(img_path,
-                         ann_path,
-                         img,
+def make_annotation_file(img_path, 
+                         ann_path, 
+                         img, 
                          ann,
                          save_img=True):
     if save_img:
@@ -113,7 +118,7 @@ def make_dataset_from_video(game_play_view,
                             save_path,# = "../data/train_img_interp/",
                                  #not_interp = False,
                                  interval=1,
-                                 ):
+                                 only_center_of_step=False):
     os.makedirs(save_path, exist_ok=True)
     VIDEO_CODEC = "MP4V"
     video_name = os.path.basename(video_path)
@@ -128,15 +133,15 @@ def make_dataset_from_video(game_play_view,
     frame = 0
     mistake = 0
     while True:
-        #it_worked, img = vidcap.read()
-        #if not it_worked:
-        #    break
+        it_worked, img = vidcap.read()
+        if not it_worked:
+            break
         if frame > total_frames:
             break
         # We need to add 1 to the frame count to match the label frame index
         # that starts at 1
         print("\r----- frame no. {}/{} in {}.mp4-----".format(frame, total_frames, video_name), end="")
-        frame += 1
+        frame += 1        
         if frame % interval != 0:
             continue
 
@@ -145,14 +150,23 @@ def make_dataset_from_video(game_play_view,
         #for df_frame in df_video.itertuples(index=False):
         if len(df_frame)==0:
             continue
-
+        
+        step_no = df_frame["step"].iloc[0]
+        if only_center_of_step:
+            if df_frame["center_frame_of_step"].iloc[0]==False:
+                continue
+        #df_frame =  labels[labels["step"]==step_no]
+        #if len(df_frame)==0:
+        #    continue
+        
+        
         img_path, ann_path = get_file_name(save_path, game_play_view, frame)
         rectangles = make_rectangle(df_frame)
         player_id_1 = df_frame["nfl_player_id"].values.astype(int).tolist()
         set_1 = set([0]+player_id_1)
         player_id_2 = df_frame["nfl_player_id_2"].values.tolist()
         contact_labels = df_frame["contact"].values.tolist()
-
+        
         # players not in the image. very fool
         remaked_pid2 = []
         remaked_cont = []
@@ -160,20 +174,20 @@ def make_dataset_from_video(game_play_view,
             bool_list = [id2 in set_1 for id2 in pid2]
             remaked_pid2.append([p for p, b in zip(pid2, bool_list) if b])
             remaked_cont.append([c for c, b in zip(cont, bool_list) if b])
-
+        
         ##### 一時的
-
+        
         set_1 = set([0]+player_id_1)
         set_2 = set(chain_list(remaked_pid2))
         #print(len(set_1), len(set_2))
         if len(set_1) < len(set_2):
-            mistake += 1
-
-
+            mistake += 1    
+            
+        
         #"""
         num_contact_labels = [len(ids) for ids in remaked_cont]
         num_player = len(player_id_1)
-        ann = {"file": img_path,
+        ann = {"file": img_path, 
                "rectangles": rectangles,
                "player_id_1": player_id_1,
                "player_id_2": remaked_pid2,
@@ -181,12 +195,12 @@ def make_dataset_from_video(game_play_view,
                "num_contact_labels": num_contact_labels,
                "num_player": num_player,
                }
-
-        make_annotation_file(img_path,
-                             ann_path,
-                             None,#img,
+        
+        make_annotation_file(img_path, 
+                             ann_path, 
+                             img, 
                              ann,
-                             save_img=False)
+                             save_img=True)
         #"""
     print(mistake)
 
@@ -226,11 +240,11 @@ def add_track_features(tracks, fps=59.94, snap_frame=10):
     return tracks
 
 def make_interpolated_tracking(df_tracking, df_helmet):
-
+    
     df_ref_play_frame = pd.DataFrame(df_helmet["video_frame"].unique())[0].str.rsplit('_', n=2, expand=True).rename(columns={0: 'game_play', 1: 'view', 2:"frame"}).drop("view",axis=1).drop_duplicates()
     df_ref_play_frame["frame"] = df_ref_play_frame["frame"].astype("int")
     df_ref_play_frame = df_ref_play_frame.sort_values(['game_play', "frame"])
-
+    
     df_list = []
 
     for keys, _df_tracking in df_tracking.groupby(["player", "game_play"]):
@@ -239,13 +253,13 @@ def make_interpolated_tracking(df_tracking, df_helmet):
             continue
         _df_ref_play_frame = df_ref_play_frame[df_ref_play_frame["game_play"]==keys[1]].copy()
         _df_ref_play_frame = _df_ref_play_frame.drop("game_play",axis=1)
-
+        
         _df_tracking = _df_tracking.sort_values("est_frame")
         _df_tracking_copy = _df_tracking[["est_frame", "x", "y"]].copy().rename(columns={"est_frame": "next_est_frame", "x":"next_x", "y":"next_y"}).shift(-1).interpolate()
         #あとの線形補間の計算上add 1しておく
         _df_tracking_copy.iloc[-1, 0] += 1
         _df_tracking = pd.concat([_df_tracking, _df_tracking_copy], axis=1)
-
+        
 
         # merge with frame and est_frame
         merged_df = pd.merge_asof(
@@ -267,7 +281,7 @@ def make_interpolated_tracking(df_tracking, df_helmet):
     all_merged_df["y_interp"] = w_1[:,1] + w_2[:,1]
     all_merged_df["motion_x"] = motion[:,0]
     all_merged_df["motion_y"] = motion[:,1]
-
+    
     all_merged_df = all_merged_df.drop(["next_est_frame", "next_x", "next_y"],axis=1)
     return all_merged_df
 
@@ -298,7 +312,7 @@ def merge_label_and_tracking_interp(tracking_df, label_df):
 
     all_merged_df = pd.concat(df_list)
     all_merged_df = all_merged_df.sort_values(["video_frame", "label"], ignore_index=True)
-
+    
     return all_merged_df
 
 
@@ -321,12 +335,12 @@ def get_file_name(save_path, video_name, num_frame):
 def __make_annotation_file(img_path, ann_path, img, rectangles, location, player,
                          motions,
                          is_impact=None,
-                         #from_current_to_points,
+                         #from_current_to_points, 
                          save_img=True):
     if save_img:
         cv2.imwrite(img_path, img)
     # Save Log
-    ann = {"file": img_path,
+    ann = {"file": img_path, 
            "rectangles": rectangles,
            "motions": motions,
            "location": location,
@@ -344,7 +358,7 @@ def make_rectangle(df):
     height = df.height.values.reshape(-1)
     bottom = top + height
     right = left + width
-    top = top.tolist()
+    top = top.tolist() 
     left = left.tolist()
     bottom = bottom.tolist()
     right = right.tolist()
@@ -373,7 +387,7 @@ def make_motions(df):
         motions.append(mot)
     return motions
 
-
+    
 def main_make_dataset_from_video_w_motion(interval=1,
                                           video_path = "../data/nfl-impact-detection/train/*.mp4",
                                           track_path = "../data/train_player_tracking_interp_w_motion.csv",
@@ -393,7 +407,7 @@ def main_make_dataset_from_video_w_motion(interval=1,
     if not_interp:
         video_labels = video_labels[np.abs((video_labels["frame"]-video_labels["est_frame"]).values)<0.5]
     #print(len(video_labels))
-
+    
     for video_file in videos:
         num_frame = 1
         video_name = os.path.basename(video_file).split(".mp4")[0]
@@ -430,7 +444,7 @@ def main_make_dataset_from_video_w_motion(interval=1,
                     all_motions = make_motions(single_frame_track)
                     all_players = single_frame_track["player"].values.tolist()
                     #return locations, all_locations
-                    #impacts = list(single_frame_labels.impact.fillna(0).values)
+                    #impacts = list(single_frame_labels.impact.fillna(0).values)        
                     make_annotation_file(img_path, ann_path, frame, rectangles, locations, players, motions=motions, is_impact=is_impact, save_img=False)
                     make_annotation_file(img_path, ann_path_test, frame, rectangles, all_locations, all_players, motions=all_motions, save_img=True)
 
@@ -438,28 +452,32 @@ def main_make_dataset_from_video_w_motion(interval=1,
             num_frame += 1
     return video_labels
 
+
 if __name__=="__main__":
     # Read in data files
-    """
+    #"""
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
     DEBUG = args.debug
-
+    
+    only_center_of_step = True
+    
     setting_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),"SETTINGS.json")
 
     DIRS = json.load(open(setting_file))#os.path.join(os.getcwd(), 'SETTINGS.json'), 'r'))
     BASE_DIR = DIRS["RAW_DATA_DIR"]
     SAVE_DIR = DIRS["TRAIN_DATA_DIR"]
+    
     os.makedirs(SAVE_DIR, exist_ok=True)
-
-
-
+    
+    
+    
     # Labels and sample submission
     labels = pd.read_csv(f"{BASE_DIR}/train_labels.csv", parse_dates=["datetime"])
-
+    
     ss = pd.read_csv(f"{BASE_DIR}/sample_submission.csv")
-
+    
     # Player tracking data
     tr_tracking = pd.read_csv(
         f"{BASE_DIR}/train_player_tracking.csv", parse_dates=["datetime"]
@@ -467,62 +485,62 @@ if __name__=="__main__":
     te_tracking = pd.read_csv(
         f"{BASE_DIR}/test_player_tracking.csv", parse_dates=["datetime"]
     )
-
+    
     # Baseline helmet detection labels
     tr_helmets = pd.read_csv(f"{BASE_DIR}/train_baseline_helmets.csv")
     te_helmets = pd.read_csv(f"{BASE_DIR}/test_baseline_helmets.csv")
-
+    
     # Video metadata with start/stop timestamps
     tr_video_metadata = pd.read_csv(
         f"{BASE_DIR}/train_video_metadata.csv",
         parse_dates=["start_time", "end_time", "snap_time"],
     )
-
-
-
+    
+    
+    
     th = 3.
     labels = pd.read_csv(f"{BASE_DIR}/train_labels.csv", parse_dates=["datetime"])
     # use only near pairs or with ground
     labels = compute_distance(labels, tr_tracking)
     labels = labels[np.logical_or(labels["distance"]<th, labels["nfl_player_id_2"]=="G")]
     print(labels.head())
-
+    
     # label "G" -> 0
     labels['nfl_player_id_1'] = labels['nfl_player_id_1'].str.replace("G","0").astype(int)
     labels['nfl_player_id_2'] = labels['nfl_player_id_2'].str.replace("G","0").astype(int)
     #labels['nfl_player_id_1']#.astype(int)
-
+    
     # add flipped label
     labels_flip = labels.copy().rename(columns={'nfl_player_id_1': 'nfl_player_id_2', 'nfl_player_id_2': 'nfl_player_id_1'})
     labels = pd.concat([labels,labels_flip], axis=0)
     print(labels.shape)
-
+    
     labels_mini = pd.DataFrame(labels.groupby(["game_play", "datetime", "step","nfl_player_id_1"])["nfl_player_id_2"].apply(list))
     labels_mini["contact"] = labels.groupby(["game_play", "datetime", "step","nfl_player_id_1"])["contact"].apply(list)
     labels_mini["num_labels"] = labels_mini["contact"].apply(len)
     labels_mini["num_labels"].hist()
     labels_mini = labels_mini.reset_index()
-    """
+    #"""
     for game_play in labels_mini["game_play"].unique():
         for view in ["Sideline", "Endzone"]:
-            gp = join_helmets_contact(game_play, labels_mini, tr_helmets, tr_video_metadata, view)
+            gp = join_helmets_contact(game_play, labels_mini, tr_helmets, tr_video_metadata, view, only_center_of_step=only_center_of_step)
             gp["contact"] = gp["contact"].apply(lambda d: d if isinstance(d, list) else [])
             gp["nfl_player_id_2"] = gp["nfl_player_id_2"].apply(lambda d: d if isinstance(d, list) else [])
-
+            
             video_path = f"{BASE_DIR}/train/{game_play}_{view}.mp4"
-            save_path = f"{SAVE_DIR}/train_img/{game_play}_{view}/"
+            save_path = f"{SAVE_DIR}/train_img_10fps/{game_play}_{view}/" if only_center_of_step else f"{SAVE_DIR}/train_img/{game_play}_{view}/"
             game_play_view = f"{game_play}_{view}"
-
+                                                  
             make_dataset_from_video(game_play_view,
                                     video_path,# = "../data/nfl-impact-detection/train/*.mp4",
                                     gp,# = "../data/train_label_tracking_merged_interp_w_motion.csv",
                                     save_path,# = "../data/train_img_interp/",
                                     #not_interp = False,
-                                    interval=3,
-                                    )
+                                    interval=1 if only_center_of_step else 3,
+                                    only_center_of_step=only_center_of_step)
 
 
-
+    
 
 
 
@@ -533,37 +551,37 @@ if __name__=="__main__":
     labels = pd.read_csv(f"{BASE_DIR}/train_labels.csv", parse_dates=["datetime"])
 
     ##ss = pd.read_csv(f'{BASE_DIR}/sample_submission.csv')
-
+    
     # Player tracking data
     tr_tracking = pd.read_csv(f'{BASE_DIR}/train_player_tracking.csv')
     ##te_tracking = pd.read_csv(f'{BASE_DIR}/test_player_tracking.csv')
-
+    
     # Baseline helmet detection labels
     tr_helmets = pd.read_csv(f'{BASE_DIR}/train_baseline_helmets.csv')
     ##te_helmets = pd.read_csv(f'{BASE_DIR}/test_baseline_helmets.csv')
-
+    
     # Extra image labels
     #img_labels = pd.read_csv(f'{BASE_DIR}/image_labels.csv')
-
-
+    
+ 
     # Remake dataset for training.
     tr_tracking = add_track_features(tr_tracking)
     #tr_tracking.to_csv(f"{SAVE_DIR}/train_player_tracking_w_motion.csv", index=False)
-
+    
     tr_tracking = make_interpolated_tracking(tr_tracking, tr_helmets)
     tr_tracking.to_csv(f"{SAVE_DIR}/train_player_tracking_interp_w_motion.csv", index=False)
     """
     """
     merged_df = merge_label_and_tracking_interp(tr_tracking, labels)
     merged_df.to_csv(f"{SAVE_DIR}/train_label_tracking_merged_interp_w_motion.csv", index=False)
-
+        
 
     main_make_dataset_from_video_w_motion(video_path = f"{BASE_DIR}/train/*.mp4",
                                           track_path = f"{SAVE_DIR}/train_player_tracking_interp_w_motion.csv",
                                           new_label_path = f"{SAVE_DIR}/train_label_tracking_merged_interp_w_motion.csv",
                                           save_base = f"{SAVE_DIR}/train_img/",
                                           not_interp=True)
-
+    
     main_make_dataset_from_video_w_motion(video_path = f"{BASE_DIR}/train/*.mp4",
                                           track_path = f"{SAVE_DIR}/train_player_tracking_interp_w_motion.csv",
                                           new_label_path = f"{SAVE_DIR}/train_label_tracking_merged_interp_w_motion.csv",
@@ -571,5 +589,5 @@ if __name__=="__main__":
     """
 
 
-
-
+    
+    

@@ -166,6 +166,107 @@ def load_data(path,
         dataset.append(data)
     return dataset
 
+def load_dataset_se(path_list,
+                 num_max=-1, 
+                 frame_interval=1, 
+                 raft_model=False,
+                 gcn_model=False):
+    dataset_v0 = []
+    dataset_v1 = []
+    for path in path_list:
+        data_v0, data_v1 = load_data_side_end_frames(path,
+                          num_max=num_max, 
+                          frame_interval=frame_interval, 
+                          )
+        dataset_v0 += data_v0
+        dataset_v1 += data_v1
+    return dataset_v0, dataset_v1
+
+def load_data_side_end_frames(path,
+              num_max=-1, 
+              frame_interval=1, 
+              ):
+    if "Sideline" in path:
+        path_converter = lambda x: x.replace("Sideline", "Endzone")
+    if "Endzone" in path:
+        path_converter = lambda x: x.replace("Endzone", "Sideline")
+        
+    rgb_files_v0 = sorted(glob.glob(os.path.join(path, "*.jpg")))[::frame_interval]
+    rgb_files_v1 = [path_converter(p) for p in rgb_files_v0]
+    #rgb_files_pprev = rgb_files[4:]
+    #rgb_files_prev = rgb_files[3:-1]
+    #rgb_files_current = rgb_files[1:-1]
+    #rgb_files_next = rgb_files[1:-3]
+    #rgb_files_nnext = rgb_files[:-4]
+
+    pos_files_v0 = [rgb_f.replace(".jpg", "_pos.npy") for rgb_f in rgb_files_v0]
+    pos_files_v1 = [rgb_f.replace(".jpg", "_pos.npy") for rgb_f in rgb_files_v1]
+    ann_files_v0 = sorted(glob.glob(os.path.join(path, "*_label.json")))[::frame_interval]
+    ann_files_v1 = [path_converter(p) for p in ann_files_v0]
+    num_files = len(ann_files_v0)
+    dataset_v0 = []
+    dataset_v1 = []
+    for i, [pos_file_v0, pos_file_v1, rgb_file_v0, rgb_file_v1, ann_file_v0, ann_file_v1] in enumerate(zip(pos_files_v0, pos_files_v1, rgb_files_v0, rgb_files_v1, ann_files_v0, ann_files_v1)):
+            
+        if i%(num_files//4)==0:
+            print("\r----- loading dataset {}/{} -----".format(i+1, num_files), end="")
+        if not os.path.exists(ann_file_v1) or not os.path.exists(rgb_file_v1):
+            continue
+
+        ann = json.load(open(ann_file_v0, 'r')) 
+        rectangles = np.array(ann["rectangles"], np.float32)
+        num_player = int(ann["num_player"])
+        num_labels = np.array(ann["num_contact_labels"], np.int32).sum()
+        if num_labels == 0 :
+            continue
+        player_id = np.array(ann["player_id_1"], np.int32)
+        player_id_1 = np.array(chain_list([[pid] * num for pid, num in zip(ann["player_id_1"], ann["num_contact_labels"])]), np.int32)
+        player_id_2 = np.array(chain_list(ann["player_id_2"]), np.int32)
+        contact_labels = np.array(chain_list(ann["contact_labels"]), np.int32)
+        contact_pairlabels = np.vstack([player_id_1, player_id_2, contact_labels]).T
+        #contact_labels = np.array(ann["contact_labels"])#, np.int32)
+        player_positions = np.load(pos_file_v0)
+        
+        data_v0 = {"file": rgb_file_v0,
+                "rectangles": rectangles, 
+                "player_positions": player_positions,
+                "player_id": player_id, 
+                "contact_pairlabels": contact_pairlabels,
+                "num_labels": num_labels,
+                "num_player":num_player, 
+                "img_height": 720,
+                "img_width": 1280,
+                }
+
+        ann = json.load(open(ann_file_v1, 'r')) 
+        rectangles = np.array(ann["rectangles"], np.float32)
+        num_player = int(ann["num_player"])
+        num_labels = np.array(ann["num_contact_labels"], np.int32).sum()
+        if num_labels == 0 :
+            continue
+        player_id = np.array(ann["player_id_1"], np.int32)
+        player_id_1 = np.array(chain_list([[pid] * num for pid, num in zip(ann["player_id_1"], ann["num_contact_labels"])]), np.int32)
+        player_id_2 = np.array(chain_list(ann["player_id_2"]), np.int32)
+        contact_labels = np.array(chain_list(ann["contact_labels"]), np.int32)
+        contact_pairlabels = np.vstack([player_id_1, player_id_2, contact_labels]).T
+        #contact_labels = np.array(ann["contact_labels"])#, np.int32)
+        player_positions = np.load(pos_file_v1)
+        
+        data_v1 = {"file": rgb_file_v1,
+                "rectangles": rectangles, 
+                "player_positions": player_positions,
+                "player_id": player_id, 
+                "contact_pairlabels": contact_pairlabels,
+                "num_labels": num_labels,
+                "num_player":num_player, 
+                "img_height": 720,
+                "img_width": 1280,
+                }        
+
+        dataset_v0.append(data_v0)
+        dataset_v1.append(data_v1)
+    return dataset_v0, dataset_v1
+
 
 def decode_image(dataset):
     def read_jpg(img_file):
@@ -385,7 +486,7 @@ def pad_box_and_labels_if_necessary(data, max_box_num=20, max_pair_num=40, playe
     invalid_label = tf.constant([[0,0,-1]], dtype=tf.int32)
     num_tile = max_pair_num - data["num_labels"]
     data["contact_pairlabels_indices"] = tf.concat([data["contact_pairlabels_indices"], tf.tile(invalid_label, [num_tile,1])], axis=0)
-    data["contact_pairlabels"] = tf.concat([data["contact_pairlabels"], tf.tile(invalid_label, [num_tile,1])], axis=0)
+    data["contact_pairlabels"] = tf.concat([data["contact_pairlabels"], tf.tile(invalid_label, [num_tile,1])], axis=0)[:max_pair_num]
     
     #num_tile = tf.math.ceil(tf.cast(max_box_num - data["num_player"], tf.float32) / tf.cast(data["num_player"], tf.float32))
     # 無意味にオーバーラップがでるのでやめるべき？、バッチノームの統計値が心配ではある
@@ -399,6 +500,12 @@ def pad_box_and_labels_if_necessary(data, max_box_num=20, max_pair_num=40, playe
     #data["rectangles"] = tf.concat([data["rectangles"], tf.tile(invalid_label, [num_tile,1])], axis=0)
     
     return data
+
+def pad_box_and_labels_if_necessary_se(data_s, data_e, max_box_num=20, max_pair_num=40, player_pos_exist=True):
+    data_s = pad_box_and_labels_if_necessary(data_s, max_box_num, max_pair_num, player_pos_exist)
+    data_e = pad_box_and_labels_if_necessary(data_e, max_box_num, max_pair_num, player_pos_exist)
+    
+    return data_s, data_e
     
 def assign_input_output(data):
     if LOAD_FLOW:
@@ -417,11 +524,115 @@ def assign_input_output(data):
     outputs = {
               "output_contact_label": data["contact_pairlabels_indices"][:,2],
               "output_contact_label_player": player_contact_label,
+              #"output_contact_label_playerc": player_contact_label,
               "output_contact_label_total": data["contact_pairlabels_indices"][:,2],
+              #"output_contact_label_totalc": data["contact_pairlabels_indices"][:,2],
+              #"output_next_model": data["contact_pairlabels_indices"][:,2],
               "contact_map": tf.ones((1,1)), # dummy
               }
 
     return inputs, outputs
+
+def player_indices_in_other_video(p_id_s, p_id_e, max_box_num):
+    """
+    player_ids:
+        player_ids exist on image
+        
+    p_id_s = tf.range(1,10)
+    p_id_e = tf.range(6,15)
+    -> ps_from_pe_ind = [0 0 0 0 0 0 1 2 3 4]
+    """
+    # ground(dummy) as_zero
+    p_id_s = tf.pad(p_id_s, [[1,0]], constant_values=0)
+    p_id_e = tf.pad(p_id_e, [[1,0]], constant_values=0)
+    es_ind = tf.where((p_id_s[tf.newaxis,:] - p_id_e[:,tf.newaxis])==0)[1:] # exclude ground
+    ps_ind = es_ind[1:,1] 
+    pe_ind = es_ind[1:,0] # exclude ground
+    
+    # zero_padding
+    #num_pad = max_pair_num - pe_ind.shape[0]
+    pe_from_ps_ind = tf.scatter_nd(pe_ind[:,tf.newaxis], ps_ind, shape=(max_box_num+1,))[1:] # first(0th) index is for ground
+    ps_from_pe_ind = tf.scatter_nd(ps_ind[:,tf.newaxis], pe_ind, shape=(max_box_num+1,))[1:] # tf.pad(pe_ind, [[0,num_pad]], constant_values=0)
+    return ps_from_pe_ind, pe_from_ps_ind
+
+def assign_input_output_se(data_s, data_e, max_box_num):
+    
+    ps_from_pe_ind, pe_from_ps_ind = player_indices_in_other_video(data_s["player_id"], data_e["player_id"], max_box_num)
+    
+    is_ground_s = tf.cast(data_s["contact_pairlabels_indices"][:,1]==0, tf.int32)
+    player_contact_label_s = data_s["contact_pairlabels_indices"][:,2] - 10 * is_ground_s# not use ground
+
+    is_ground_e = tf.cast(data_e["contact_pairlabels_indices"][:,1]==0, tf.int32)
+    player_contact_label_e = data_e["contact_pairlabels_indices"][:,2] - 10 * is_ground_e# not use ground
+    """
+    inputs = {"input_rgb_s": data_s["rgb"],
+              "input_boxes_s": data_s["rectangles"],
+              "input_player_positions_s": data_s["player_positions"],
+              "input_pairs_s": data_s["contact_pairlabels_indices"][:,:2],
+              
+              "input_rgb_e": data_e["rgb"],
+              "input_boxes_e": data_e["rectangles"],
+              "input_player_positions_e": data_e["player_positions"],
+              "input_pairs_e": data_e["contact_pairlabels_indices"][:,:2],
+              
+              "input_player_in_other_video_s": pe_from_ps_ind,
+              "input_player_in_other_video_e": ps_from_pe_ind,
+              
+              }
+    
+    outputs = {
+              "output_contact_label_s": data_s["contact_pairlabels_indices"][:,2],
+              "output_contact_label_player_s": player_contact_label_s,
+              "output_contact_label_total_s": data_s["contact_pairlabels_indices"][:,2],
+              "contact_map_s": tf.ones((1,1)), # dummy
+              
+              "output_contact_label_e": data_e["contact_pairlabels_indices"][:,2],
+              "output_contact_label_player_e": player_contact_label_e,
+              "output_contact_label_total_e": data_e["contact_pairlabels_indices"][:,2],
+              "contact_map_e": tf.ones((1,1)), # dummy
+               }
+    """
+    inputs = {"input_rgb_s": data_s["rgb"],
+              "input_boxes_s": data_s["rectangles"],
+              "input_player_positions_s": data_s["player_positions"],
+              "input_pairs_s": data_s["contact_pairlabels_indices"][:,:2],
+              
+              "input_rgb_e": data_e["rgb"],
+              "input_boxes_e": data_e["rectangles"],
+              "input_player_positions_e": data_e["player_positions"],
+              "input_pairs_e": data_e["contact_pairlabels_indices"][:,:2],
+              
+              "input_player_in_other_video_s": pe_from_ps_ind,
+              "input_player_in_other_video_e": ps_from_pe_ind,
+              
+              }
+    
+    outputs = {
+              "output_contact_label_s": data_s["contact_pairlabels_indices"][:,2],
+              "output_contact_label_player_s": player_contact_label_s,
+              "output_contact_label_total_s": data_s["contact_pairlabels_indices"][:,2],
+              "contact_map_s": tf.ones((1,1)), # dummy
+              
+              "output_contact_label_e": data_e["contact_pairlabels_indices"][:,2],
+              "output_contact_label_player_e": player_contact_label_e,
+              "output_contact_label_total_e": data_e["contact_pairlabels_indices"][:,2],
+              "contact_map_e": tf.ones((1,1)), # dummy
+               }
+
+    return inputs, outputs
+
+def concat_side_end(inputs, outputs):
+    new_inputs = {}
+    for k in ["input_rgb", "input_boxes", "input_player_positions", "input_pairs", "input_player_in_other_video"]:
+        #for k in ["input_rgb", "input_boxes", "input_player_positions", "input_pairs"]:
+        new_inputs[k] = tf.concat([inputs[k+"_s"], inputs[k+"_e"]], axis=0)
+    new_outputs = {}
+    for k in ["output_contact_label", "output_contact_label_player", "output_contact_label_total", "contact_map"]:
+        new_outputs[k] = tf.concat([outputs[k+"_s"], outputs[k+"_e"]], axis=0)
+    new_outputs["output_contact_label_playerc"] = new_outputs["output_contact_label_player"]
+    new_outputs["output_next_model"] = new_outputs["output_contact_label_total"]
+    return new_inputs, new_outputs
+    
 
 def assign_input_output_w_info(data, player_pos_exist=False):
     inputs = {"input_rgb": data["rgb"],
@@ -474,6 +685,87 @@ def get_tf_dataset(list_dataset,
     
     return dataset
 
+def get_tf_dataset_se(list_dataset_s, 
+                      list_dataset_e,
+                      input_shape, 
+                      output_shape,
+                      batch_size, 
+                      transforms, 
+                      #max_box_num=22,
+                      is_train=True,
+                      max_box_num=20,
+                      max_pair_num=40):
+    """
+    side end model
+    """
+    print("start building dataset")
+    """
+    return get_tf_dataset(list_dataset_s, 
+                      input_shape, 
+                      output_shape,
+                      batch_size, 
+                      transforms, 
+                      #max_box_num=22,
+                      is_train,
+                      max_box_num,
+                      max_pair_num)
+    """
+    dataset_s = build_tf_dataset(list_dataset_s)    
+    dataset_s = dataset_s.map(transforms, num_parallel_calls=AUTO)
+    dataset_s = dataset_s.map(normalize_inputs_outputs, num_parallel_calls=AUTO)
+    dataset_s = dataset_s.map(lambda x: box_xycoords_to_tlbr(x, max_box_num=max_box_num, max_pair_num=max_pair_num), num_parallel_calls=AUTO)
+    
+    dataset_e = build_tf_dataset(list_dataset_e)
+    dataset_e = dataset_e.map(transforms, num_parallel_calls=AUTO)
+    dataset_e = dataset_e.map(normalize_inputs_outputs, num_parallel_calls=AUTO)
+    dataset_e = dataset_e.map(lambda x: box_xycoords_to_tlbr(x, max_box_num=max_box_num, max_pair_num=max_pair_num), num_parallel_calls=AUTO)
+    
+    #dataset_s = dataset_s.filter(lambda x: x["num_player"] > 1)
+    #dataset_e = dataset_e.filter(lambda x: x["num_player"] > 1)
+
+    dataset_se = tf.data.Dataset.zip((dataset_s, dataset_e))
+    dataset_se = dataset_se.filter(lambda x, y: x["num_player"] > 1)
+    dataset_se = dataset_se.filter(lambda x, y: y["num_player"] > 1)
+    #dataset_s = dataset_se.map(lambda x, y: x)
+    #dataset_e = dataset_se.map(lambda x, y: y)
+
+    #dataset_s = dataset_s.map(lambda x: pad_box_and_labels_if_necessary(x, max_box_num=max_box_num, max_pair_num=max_pair_num), num_parallel_calls=AUTO)
+    #dataset_e = dataset_e.map(lambda x: pad_box_and_labels_if_necessary(x, max_box_num=max_box_num, max_pair_num=max_pair_num), num_parallel_calls=AUTO)
+    
+    dataset_se = dataset_se.map(lambda x, y: pad_box_and_labels_if_necessary_se(x, y, max_box_num=max_box_num, max_pair_num=max_pair_num), num_parallel_calls=AUTO)
+    
+    """
+    dataset = dataset_s.map(assign_input_output, num_parallel_calls=AUTO)
+    
+    if is_train:
+        dataset = dataset.shuffle(128)
+        dataset = dataset.repeat() # the training dataset must repeat for several epochs
+    else:# cache sometimes causes memory error
+        #dataset = dataset.cache()
+        dataset = dataset.repeat()
+    dataset = dataset.batch(batch_size, drop_remainder=True)
+    dataset = dataset.prefetch(AUTO) # prefetch next batch while training (autotune prefetch buffer size)
+    return dataset
+    
+    """
+    
+    #dataset_se = tf.data.Dataset.zip((dataset_s, dataset_e))
+    dataset_se = dataset_se.map(lambda x,y: assign_input_output_se(x, y, max_box_num), num_parallel_calls=AUTO)
+    
+    if is_train:
+        # dataset_se = dataset_se.shuffle(128)
+        dataset_se = dataset_se.repeat() # the training dataset must repeat for several epochs
+    else:# cache sometimes causes memory error
+        #dataset = dataset.cache()
+        dataset_se = dataset_se.repeat()
+    dataset_se = dataset_se.batch(batch_size, drop_remainder=True)
+    if is_train:
+        dataset_se = dataset_se.shuffle(32)
+    dataset_se = dataset_se.map(concat_side_end, num_parallel_calls=AUTO)
+    dataset_se = dataset_se.prefetch(AUTO) # prefetch next batch while training (autotune prefetch buffer size)
+    return dataset_se
+    
+
 def get_tf_dataset_inference(list_dataset, 
                   transforms, 
                   batch_size=1, 
@@ -493,7 +785,7 @@ def get_tf_dataset_inference(list_dataset,
     dataset = dataset.filter(lambda x: x["num_player"] >= 1)
     if padding:
         dataset = dataset.map(lambda x: pad_box_and_labels_if_necessary(x, max_box_num=max_box_num, max_pair_num=max_pair_num), num_parallel_calls=AUTO)
-    dataset = dataset.map(assign_input_output_w_info, num_parallel_calls=AUTO)
+    dataset = dataset.map(lambda x: assign_input_output_w_info(x, player_pos_exist=True), num_parallel_calls=AUTO)
     
     dataset = dataset.batch(batch_size, drop_remainder=False)
     dataset = dataset.prefetch(AUTO) # prefetch next batch while training (autotune prefetch buffer size)
@@ -755,6 +1047,8 @@ def preprop_inference(data, sequence_length=7, num_default_player=22):
     
     # num_total_steps, num_players, num_features = data["player_3d_num_matrix"].shape
     num_total_steps, num_players, num_features = tf.unstack(tf.shape(data["player_3d_num_matrix"]))
+    
+    """
     #starts = np.minimum(np.arange(0, num_total_steps, step), num_total_steps-step) # final sequence can be overlapped
     starts = tf.minimum(tf.range(0, num_total_steps, sequence_length), num_total_steps - sequence_length) # final sequence can be overlapped
     ends = starts + sequence_length
@@ -770,9 +1064,40 @@ def preprop_inference(data, sequence_length=7, num_default_player=22):
     data["label_g_contact"] = tf.stack([data["label_g_contact"][start:end] for start, end in zip(starts, ends)], axis=0)
     
     data["num_players"] = num_players
+    """
+    #starts = np.minimum(np.arange(0, num_total_steps, step), num_total_steps-step) # final sequence can be overlapped
+    starts = tf.range(0, num_total_steps - sequence_length) # final sequence can be overlapped
+    ends = starts + sequence_length
+    num_sequence = tf.shape(starts)[0] # ==batch
+    
+    data["player_3d_num_matrix"] = tf.stack([data["player_3d_num_matrix"][start:end] for start, end in zip(starts, ends)], axis=0)
+    data["step_range"] = tf.stack([data["step_range"][start:end] for start, end in zip(starts, ends)], axis=0)
+    data["step_range_norm"] = tf.stack([data["step_range_norm"][start:end] for start, end in zip(starts, ends)], axis=0)
+    data["p2p_adj_dist_matrix"] = tf.stack([data["p2p_adj_dist_matrix"][start:end] for start, end in zip(starts, ends)], axis=0)
+    data["p2p_adj_team_matrix"] = tf.tile(tf.reshape(data["p2p_adj_team_matrix"], [1, 1, num_players, num_players]), [num_sequence, sequence_length, 1, 1])
+
+    data["label_p_contact"] = tf.stack([data["label_p_contact"][start:end] for start, end in zip(starts, ends)], axis=0)
+    data["label_g_contact"] = tf.stack([data["label_g_contact"][start:end] for start, end in zip(starts, ends)], axis=0)
+    
+    data["num_players"] = num_players
+    
+    
     
     data = pad_player_if_necessary(data, num_default_player, no_label=False)
+    data = extract_orientation(data)
     data = normalize_inputs_outputs_gcn(data)
+    
+    
+    
+    inputs = {"input_features": data["player_3d_num_matrix"],#tf.concat([data["player_3d_num_matrix"][...,:2],data["player_3d_num_matrix"][...,8:]], axis=-1),
+              "input_orientations": data["player_orientation_sincos"],
+              "input_positions": data["player_position_xy"],
+              "input_adjacency_matrix": tf.transpose(data["adj_matrix"], [0,3,4,2,1])}
+    
+    data["step"] = data["step_range"][:,sequence_length//2]
+    data["label_p_contact"] = data["label_p_contact"][:,sequence_length//2]
+    
+    
     """
     num_players = tf.minimum(data["num_players"], num_default_player)
     num_pad = num_default_player - num_players
@@ -802,7 +1127,7 @@ def preprop_inference(data, sequence_length=7, num_default_player=22):
     #data["num_players"] = num_players
     #data["sequence_length"] = sequence_length
     
-    return data
+    return data, inputs
 
 def pad_player_if_necessary(data, num_default=22, no_label=False):
     num_players = tf.minimum(data["num_players"], num_default)
@@ -827,6 +1152,12 @@ def mask_easy_samples(data):
     data["label_p_contact"] = data["label_p_contact"] - 2 * tf.cast(data["p2p_adj_dist_matrix"] >= 3, tf.int32)
     return data
 
+def extract_orientation(data):
+    data["player_orientation_sincos"] = data["player_3d_num_matrix"][...,5:7]  
+    data["player_position_xy"] = data["player_3d_num_matrix"][...,:2] * tf.constant([60, 26.65], tf.float32)  
+                                 
+    return data
+
 def normalize_inputs_outputs_gcn(data):
     #dist_mat_1 = tf.cast(data["p2p_adj_dist_matrix"] < 1, tf.float32)
     #dist_mat_3 = tf.cast(data["p2p_adj_dist_matrix"] < 3, tf.float32)
@@ -846,7 +1177,9 @@ def normalize_inputs_outputs_gcn(data):
 
 def select_unbatch_data(data):
     return {"player_3d_num_matrix": data["player_3d_num_matrix"],
-            "adj_matrix": data["adj_matrix"],
+            "player_orientation_sincos": data["player_orientation_sincos"],
+            "player_position_xy": data["player_position_xy"],
+                    "adj_matrix": data["adj_matrix"],
                     "label_g_contact": data["label_g_contact"],
                             "label_p_contact": data["label_p_contact"],
                                     "step_range_norm" : data["step_range_norm"][...,tf.newaxis]}
@@ -859,6 +1192,7 @@ def assign_input_output_gcn(data, sequence_length=7):
     
     if sequence_length==1:
         inputs = {"input_features": data["player_3d_num_matrix"][0],
+                  "input_orientations": data["player_orientation_sincos"][0],
                   "input_adjacency_matrix": data["adj_matrix"][:,0],
                   "step_range": data["step_range_norm"][0],
                       }
@@ -868,12 +1202,21 @@ def assign_input_output_gcn(data, sequence_length=7):
                   }        
     else:
         inputs = {"input_features": data["player_3d_num_matrix"],#tf.concat([data["player_3d_num_matrix"][...,:2],data["player_3d_num_matrix"][...,8:]], axis=-1),
-                  "input_adjacency_matrix": data["adj_matrix"],
-                  "step_range": data["step_range_norm"],
+                  "input_orientations": data["player_orientation_sincos"],
+                  "input_positions": data["player_position_xy"],
+                  #"input_adjacency_matrix": data["adj_matrix"][:,sequence_length//2],
+                  #"input_adjacency_matrix": tf.transpose(data["adj_matrix"][:,sequence_length//2], [1,2,0]),
+                  "input_adjacency_matrix": tf.transpose(data["adj_matrix"], [2,3,1,0]),
+                  
+                  #"step_range": data["step_range_norm"],
                   }
         outputs = {
-                  "g_contact": data["label_g_contact"],
-                  "p_contact": data["label_p_contact"], # dummy
+                  #"g_contact": data["label_g_contact"],
+                  "p_contact": data["label_p_contact"][sequence_length//2],
+                  "p_sim_contact": data["label_p_contact"][sequence_length//2],
+                  "adj_contact": data["label_p_contact"][sequence_length//2],
+                  
+                  
                   }
 
     
@@ -895,9 +1238,9 @@ def get_tf_dataset_gcn(list_dataset,
     dataset = build_tf_dataset_gcn(list_dataset)
     
     dataset = dataset.map(lambda x: crop_sequence(x, sequence_length=sequence_length), num_parallel_calls=AUTO)
-    dataset = dataset.map(lambda x: pad_player_if_necessary(x, num_default=22), num_parallel_calls=AUTO)
+    dataset = dataset.map(lambda x: pad_player_if_necessary(x, num_default=num_players), num_parallel_calls=AUTO)
     dataset = dataset.map(lambda x: mask_easy_samples(x), num_parallel_calls=AUTO)
-    
+    dataset = dataset.map(extract_orientation, num_parallel_calls=AUTO)
     dataset = dataset.map(normalize_inputs_outputs_gcn, num_parallel_calls=AUTO)
     dataset = dataset.map(add_flip_pair, num_parallel_calls=AUTO)
     

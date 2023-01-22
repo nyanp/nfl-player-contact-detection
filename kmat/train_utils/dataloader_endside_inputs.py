@@ -35,50 +35,54 @@ def split_to_list(inputs, sizes):
         start = end
     return outputs
     
-def load_dataset(path_list,
+def load_dataset_se(path_list,
                  num_max=-1, 
                  frame_interval=1, 
                  raft_model=False,
                  gcn_model=False):
-    dataset = []
+    dataset_v0 = []
+    dataset_v1 = []
     for path in path_list:
-        if raft_model:
-            data = load_data_raft(path,
+        data_v0, data_v1 = load_data_side_end_frames(path,
                           num_max=num_max, 
                           frame_interval=frame_interval, 
                           )
-        elif gcn_model:
-            data = load_data_gcn(path)
-        else:
-            data = load_data_5frames(path,
-                          num_max=num_max, 
-                          frame_interval=frame_interval, 
-                          )
-        dataset += data
-    return dataset
+        dataset_v0 += data_v0
+        dataset_v1 += data_v1
+    return dataset_v0, dataset_v1
 
-def load_data_3frames(path,
+def load_data_side_end_frames(path,
               num_max=-1, 
               frame_interval=1, 
               ):
-    rgb_files = sorted(glob.glob(os.path.join(path, "*.jpg")))[::frame_interval]
-    rgb_files_prev = rgb_files[:-2]
-    rgb_files_current = rgb_files[1:-1]
-    rgb_files_next = rgb_files[2:]
-    
-    annotation_files = sorted(glob.glob(os.path.join(path, "*_label.json")))[1:-1]
-    pos_files = [rgb_f.replace(".jpg", "_pos.npy") for rgb_f in rgb_files_current]
-    flow_files_12 = [rgb_f.replace("train_img", "train_flow_img_512x896").replace(".jpg", "flow12.npy") for rgb_f in rgb_files_current]
-    flow_files_21 = [rgb_f.replace("train_img", "train_flow_img_512x896").replace(".jpg", "flow21.npy") for rgb_f in rgb_files_current]
-    
-    num_files = len(rgb_files_current)
-    dataset = []
-    for i, [pos_file, rgb_file_p, rgb_file_c, rgb_file_n, ann_file, flow_12, flow_21] in enumerate(zip(pos_files, rgb_files_prev, rgb_files_current, rgb_files_next, annotation_files, flow_files_12, flow_files_21)):
+    if "Sideline" in path:
+        path_converter = lambda x: x.replace("Sideline", "Endzone")
+    if "Endzone" in path:
+        path_converter = lambda x: x.replace("Endzone", "Sideline")
+        
+    rgb_files_v0 = sorted(glob.glob(os.path.join(path, "*.jpg")))[::frame_interval]
+    rgb_files_v1 = [path_converter(p) for p in rgb_files_v0]
+    #rgb_files_pprev = rgb_files[4:]
+    #rgb_files_prev = rgb_files[3:-1]
+    #rgb_files_current = rgb_files[1:-1]
+    #rgb_files_next = rgb_files[1:-3]
+    #rgb_files_nnext = rgb_files[:-4]
+
+    pos_files_v0 = [rgb_f.replace(".jpg", "_pos.npy") for rgb_f in rgb_files_v0]
+    pos_files_v1 = [rgb_f.replace(".jpg", "_pos.npy") for rgb_f in rgb_files_v1]
+    ann_files_v0 = sorted(glob.glob(os.path.join(path, "*_label.json")))
+    ann_files_v1 = [path_converter(p) for p in ann_files_v0]
+    num_files = len(ann_files_v0)
+    dataset_v0 = []
+    dataset_v1 = []
+    for i, [pos_file_v0, pos_file_v1, rgb_file_v0, rgb_file_v1, ann_file_v0, ann_file_v1] in enumerate(zip(pos_files_v0, pos_files_v1, rgb_files_v0, rgb_files_v1, ann_files_v0, ann_files_v1)):
             
         if i%(num_files//4)==0:
             print("\r----- loading dataset {}/{} -----".format(i+1, num_files), end="")
+        if not os.path.exists(ann_file_v1) and not os.path.exists(rgb_file_v1):
+            continue
 
-        ann = json.load(open(ann_file, 'r')) 
+        ann = json.load(open(ann_file_v0, 'r')) 
         rectangles = np.array(ann["rectangles"], np.float32)
         num_player = int(ann["num_player"])
         num_labels = np.array(ann["num_contact_labels"], np.int32).sum()
@@ -90,12 +94,9 @@ def load_data_3frames(path,
         contact_labels = np.array(chain_list(ann["contact_labels"]), np.int32)
         contact_pairlabels = np.vstack([player_id_1, player_id_2, contact_labels]).T
         #contact_labels = np.array(ann["contact_labels"])#, np.int32)
-        player_positions = np.load(pos_file)
+        player_positions = np.load(pos_file_v0)
         
-
-        data = {"file_p": rgb_file_p,
-                "file_c": rgb_file_c,
-                "file_n": rgb_file_n,
+        data_v0 = {"file": rgb_file_v0,
                 "rectangles": rectangles, 
                 "player_positions": player_positions,
                 "player_id": player_id, 
@@ -105,39 +106,8 @@ def load_data_3frames(path,
                 "img_height": 720,
                 "img_width": 1280,
                 }
-        
-        data["flow_12"] = flow_12
-        data["flow_21"] = flow_21
-        data["flow_width"] = 896//8
-        data["flow_height"] = 512//8
 
-        dataset.append(data)
-    return dataset
-
-def load_data_5frames(path,
-              num_max=-1, 
-              frame_interval=1, 
-              ):
-    rgb_files = sorted(glob.glob(os.path.join(path, "*.jpg")))[::frame_interval]
-    rgb_files_pprev = rgb_files[4:]
-    rgb_files_prev = rgb_files[3:-1]
-    rgb_files_current = rgb_files[2:-2]
-    rgb_files_next = rgb_files[1:-3]
-    rgb_files_nnext = rgb_files[:-4]
-
-    pos_files = [rgb_f.replace(".jpg", "_pos.npy") for rgb_f in rgb_files_current]
-    annotation_files = sorted(glob.glob(os.path.join(path, "*_label.json")))[2:-2]
-    flow_files_12 = [rgb_f.replace("train_img", "train_flow_img_512x896").replace(".jpg", "flow12.npy") for rgb_f in rgb_files_current]
-    flow_files_21 = [rgb_f.replace("train_img", "train_flow_img_512x896").replace(".jpg", "flow21.npy") for rgb_f in rgb_files_current]
-    
-    num_files = len(rgb_files_current)
-    dataset = []
-    for i, [pos_file, rgb_file_pp, rgb_file_p, rgb_file_c, rgb_file_n,  rgb_file_nn, ann_file, flow_12, flow_21] in enumerate(zip(pos_files, rgb_files_pprev, rgb_files_prev, rgb_files_current, rgb_files_next, rgb_files_nnext, annotation_files, flow_files_12, flow_files_21)):
-            
-        if i%(num_files//4)==0:
-            print("\r----- loading dataset {}/{} -----".format(i+1, num_files), end="")
-
-        ann = json.load(open(ann_file, 'r')) 
+        ann = json.load(open(ann_file_v1, 'r')) 
         rectangles = np.array(ann["rectangles"], np.float32)
         num_player = int(ann["num_player"])
         num_labels = np.array(ann["num_contact_labels"], np.int32).sum()
@@ -149,14 +119,9 @@ def load_data_5frames(path,
         contact_labels = np.array(chain_list(ann["contact_labels"]), np.int32)
         contact_pairlabels = np.vstack([player_id_1, player_id_2, contact_labels]).T
         #contact_labels = np.array(ann["contact_labels"])#, np.int32)
-        player_positions = np.load(pos_file)
+        player_positions = np.load(pos_file_v1)
         
-
-        data = {"file_pp": rgb_file_pp,
-                "file_p": rgb_file_p,
-                "file_c": rgb_file_c,
-                "file_n": rgb_file_n,
-                "file_nn": rgb_file_nn,
+        data_v1 = {"file": rgb_file_v1,
                 "rectangles": rectangles, 
                 "player_positions": player_positions,
                 "player_id": player_id, 
@@ -165,15 +130,11 @@ def load_data_5frames(path,
                 "num_player":num_player, 
                 "img_height": 720,
                 "img_width": 1280,
-                }
-        
-        data["flow_12"] = flow_12
-        data["flow_21"] = flow_21
-        data["flow_width"] = 896//8
-        data["flow_height"] = 512//8
+                }        
 
-        dataset.append(data)
-    return dataset
+        dataset_v0.append(data_v0)
+        dataset_v1.append(data_v1)
+    return dataset_v0, dataset_v1
 
 
 def decode_image(dataset):

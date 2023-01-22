@@ -505,7 +505,7 @@ def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playe
                     _, info = stacked_info.get_if_ready(neglect_readiness=is_last_batch)
 
                     preds, inp = model.predict(inp)  # inputs include positions, (output mapping model)
-                    pred_mask, pred_label_wo_map, pred_label = preds  # pred_label_wo_map is not using. old output
+                    pred_mask, pred_label = preds # pred_label_wo_map is not using. old output
                     # pred_mask, pred_label, _ = preds # pred_label_wo_map is not using. old output
 
                     if draw_pred:
@@ -636,17 +636,45 @@ def cnn_features_test(train_df, tr_tracking, tr_helmets, tr_video_metadata, ):
 
     game_plays = list(train_df_mini["game_play"].unique())
     # べた書き
-    model_01, preprocessor = load_model(
+    # model_01, preprocessor = load_model(
+    #     train_df,
+    #     "../input/mfl2cnnkmat0108/model/weights/ex000_contdet_run036_fold01train_72crop6cbr_concat_distance/final_weights.h5",
+    #     "../input/mfl2cnnkmat0108/model/weights/map_model_final_weights.h5")
+    # model_23, preprocessor = load_model(
+    #     train_df,
+    #     "../input/mfl2cnnkmat0108/model/weights/ex000_contdet_run036_fold23train_72crop6cbr_concat_distance/final_weights.h5",
+    #     "../input/mfl2cnnkmat0108/model/weights/map_model_final_weights.h5")
+    # # model_01, preprocessor, _ = get_foldcnntrain_set(train_df, train_01_val_23=True)
+    # # model_23, preprocessor, _ = get_foldcnntrain_set(train_df, train_01_val_23=False)
+    # model = CNNEnsembler([model_01, model_23], num_output_items=3)
+
+    # train_fold, val_fold = [1,2,3], [0]
+    # model_0, preprocessor, _ = get_foldcnntrain_set(train_df_mini, train_fold, val_fold)
+    # train_fold, val_fold = [0,2,3], [1]
+    # model_1, preprocessor, _ = get_foldcnntrain_set(train_df_mini, train_fold, val_fold)
+    # train_fold, val_fold = [0,1,3], [2]
+    # model_2, preprocessor, _ = get_foldcnntrain_set(train_df_mini, train_fold, val_fold)
+    # train_fold, val_fold = [0,1,2], [3]
+    # model_3, preprocessor, _ = get_foldcnntrain_set(train_df_mini, train_fold, val_fold)
+
+    model_0, preprocessor = load_model(
         train_df,
-        "../input/mfl2cnnkmat0108/model/weights/ex000_contdet_run036_fold01train_72crop6cbr_concat_distance/final_weights.h5",
-        "../input/mfl2cnnkmat0108/model/weights/map_model_final_weights.h5")
-    model_23, preprocessor = load_model(
+        "../input/mfl2cnnkmat0121/model/weights/ex000_contdet_run054_fold012train_72crop6cbr/final_weights.h5",
+        "../input/mfl2cnnkmat0121/model/weights/map_model_final_weights.h5")
+    model_1, preprocessor = load_model(
         train_df,
-        "../input/mfl2cnnkmat0108/model/weights/ex000_contdet_run036_fold23train_72crop6cbr_concat_distance/final_weights.h5",
-        "../input/mfl2cnnkmat0108/model/weights/map_model_final_weights.h5")
-    # model_01, preprocessor, _ = get_foldcnntrain_set(train_df, train_01_val_23=True)
-    # model_23, preprocessor, _ = get_foldcnntrain_set(train_df, train_01_val_23=False)
-    model = CNNEnsembler([model_01, model_23], num_output_items=3)
+        "../input/mfl2cnnkmat0121/model/weights/ex000_contdet_run054_fold023train_72crop6cbr/final_weights.h5",
+        "../input/mfl2cnnkmat0121/model/weights/map_model_final_weights.h5")
+    model_2, preprocessor = load_model(
+        train_df,
+        "../input/mfl2cnnkmat0121/model/weights/ex000_contdet_run054_fold013train_72crop6cbr/final_weights.h5",
+        "../input/mfl2cnnkmat0121/model/weights/map_model_final_weights.h5")
+    model_3, preprocessor = load_model(
+        train_df,
+        "../input/mfl2cnnkmat0121/model/weights/ex000_contdet_run054_fold123train_72crop6cbr/final_weights.h5",
+        "../input/mfl2cnnkmat0121/model/weights/map_model_final_weights.h5")
+    model = CNNEnsembler([model_0, model_1, model_2, model_3], num_output_items=2)
+
     df_end, df_side = pred_by_cnn(train_df_mini, tr_tracking, tr_helmets, tr_video_metadata, game_plays, model, preprocessor, is_train_dataset=False)
 
     df_side = postprocess_cnn_all_frame_outputs(df_side)
