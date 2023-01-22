@@ -162,3 +162,5 @@ debug.en
 *.csv
 *.npy
 *.png
+
+!visualize.ipynb
