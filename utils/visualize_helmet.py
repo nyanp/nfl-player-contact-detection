@@ -118,14 +118,14 @@ def finalize(tmp_output_path, output_path):
 
 def step_to_frame(step):
     step0_frame = 300
-    fps_frame = 59.95
+    fps_frame = 59.94
     fps_step = 10
     return int(round(step * fps_frame / fps_step + step0_frame))
 
 
 def frame_to_step(frame):
     step0_frame = 300
-    fps_frame = 59.95
+    fps_frame = 59.94
     fps_step = 10
     return int(round((frame - step0_frame) * fps_step / fps_frame))
 
