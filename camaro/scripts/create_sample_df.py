@@ -68,7 +68,7 @@ def merge_fold(df):
 
 def main():
     train_path = '../input/nfl-player-contact-detection/train_labels.csv'
-    train_helmet_path = '../input/interpolated/interpolated_train_helmets.csv'
+    train_helmet_path = '../input/nfl-player-contact-detection/train_baseline_helmets.csv'
 
     train_df = pd.read_csv(train_path)
     train_df = expand_contact_id(train_df)
