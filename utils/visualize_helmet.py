@@ -52,11 +52,13 @@ def put_text(img, text, x_ratio, y_ratio, ):
                 )
 
 
-def draw_helmet_per_frame(img, play_name, frame, frame_helmets):
+def draw_helmet_per_frame(img, play_name, p1, p2, frame, frame_helmets, text):
     # add play_name text
     put_text(img, play_name, 0.01, 0.05)
-    put_text(img, 'red:FP, blue:FN, green:TP', 0.01, 0.95)
-    put_text(img, "Frame: " + str(frame), 0.75, 0.05)
+    p2 = 'ground' if p2 == -1 else p2
+    put_text(img, f"{p1} {p2}", 0.01, 0.10)
+    put_text(img, text, 0.01, 0.98)
+    put_text(img, f"Frame: {frame}", 0.80, 0.05)
 
     if len(frame_helmets) == 0:
         return img
@@ -151,7 +153,7 @@ def add_miss_label(df):
     return df
 
 
-def save_separate_videos(labels, helmet, game_play, nfl_player_id_1, nfl_player_id_2):
+def save_separate_videos(labels, helmet, game_play, nfl_player_id_1, nfl_player_id_2, text):
     single_labels = labels.query('game_play==@game_play & nfl_player_id_1==@nfl_player_id_1  & nfl_player_id_2==@nfl_player_id_2')
     single_labels = single_labels.fillna(0)  # fill easy sample pred with 0
     single_labels = add_miss_label(single_labels)
@@ -169,7 +171,7 @@ def save_separate_videos(labels, helmet, game_play, nfl_player_id_1, nfl_player_
             view_image = load_image(game_play, view, frame)
             frame_helmet = single_helmet.query('view == @view & frame == @frame')
             frame_helmet = frame_helmet.merge(single_labels[['step', 'contact', 'y_pred', 'oof', 'miss_label']], on='step', how='left')
-            view_image = draw_helmet_per_frame(view_image, game_play, frame, frame_helmet)
+            view_image = draw_helmet_per_frame(view_image, game_play, nfl_player_id_1, nfl_player_id_2, frame, frame_helmet, text)
             out.write(view_image)
         out.release()
         output_path = f'output/{game_play}_{view}_{nfl_player_id_1}_{nfl_player_id_2}.mp4'
@@ -178,7 +180,7 @@ def save_separate_videos(labels, helmet, game_play, nfl_player_id_1, nfl_player_
     return output_paths
 
 
-def save_concat_video(labels, helmet, game_play, nfl_player_id_1, nfl_player_id_2):
+def save_concat_video(labels, helmet, game_play, nfl_player_id_1, nfl_player_id_2, text):
     single_labels = labels.query('game_play==@game_play & nfl_player_id_1==@nfl_player_id_1  & nfl_player_id_2==@nfl_player_id_2')
     single_labels = single_labels.fillna(0)  # fill easy sample pred with 0
     single_labels = add_miss_label(single_labels)
@@ -196,7 +198,7 @@ def save_concat_video(labels, helmet, game_play, nfl_player_id_1, nfl_player_id_
             view_image = load_image(game_play, view, frame)
             frame_helmet = single_helmet.query('view == @view & frame == @frame')
             frame_helmet = frame_helmet.merge(single_labels[['step', 'contact', 'y_pred', 'oof', 'miss_label']], on='step', how='left')
-            view_image = draw_helmet_per_frame(view_image, game_play, frame, frame_helmet)
+            view_image = draw_helmet_per_frame(view_image, game_play, nfl_player_id_1, nfl_player_id_2, frame, frame_helmet, text)
             if view_image is not None:
                 images.append(view_image)
             else:
