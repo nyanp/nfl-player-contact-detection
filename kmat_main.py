@@ -636,27 +636,6 @@ def cnn_features_test(train_df, tr_tracking, tr_helmets, tr_video_metadata, ):
 
     game_plays = list(train_df_mini["game_play"].unique())
     # べた書き
-    # model_01, preprocessor = load_model(
-    #     train_df,
-    #     "../input/mfl2cnnkmat0108/model/weights/ex000_contdet_run036_fold01train_72crop6cbr_concat_distance/final_weights.h5",
-    #     "../input/mfl2cnnkmat0108/model/weights/map_model_final_weights.h5")
-    # model_23, preprocessor = load_model(
-    #     train_df,
-    #     "../input/mfl2cnnkmat0108/model/weights/ex000_contdet_run036_fold23train_72crop6cbr_concat_distance/final_weights.h5",
-    #     "../input/mfl2cnnkmat0108/model/weights/map_model_final_weights.h5")
-    # # model_01, preprocessor, _ = get_foldcnntrain_set(train_df, train_01_val_23=True)
-    # # model_23, preprocessor, _ = get_foldcnntrain_set(train_df, train_01_val_23=False)
-    # model = CNNEnsembler([model_01, model_23], num_output_items=3)
-
-    # train_fold, val_fold = [1,2,3], [0]
-    # model_0, preprocessor, _ = get_foldcnntrain_set(train_df_mini, train_fold, val_fold)
-    # train_fold, val_fold = [0,2,3], [1]
-    # model_1, preprocessor, _ = get_foldcnntrain_set(train_df_mini, train_fold, val_fold)
-    # train_fold, val_fold = [0,1,3], [2]
-    # model_2, preprocessor, _ = get_foldcnntrain_set(train_df_mini, train_fold, val_fold)
-    # train_fold, val_fold = [0,1,2], [3]
-    # model_3, preprocessor, _ = get_foldcnntrain_set(train_df_mini, train_fold, val_fold)
-
     model_0, preprocessor = load_model(
         train_df,
         "../input/mfl2cnnkmat0121/model/weights/ex000_contdet_run054_fold012train_72crop6cbr/final_weights.h5",
@@ -689,7 +668,7 @@ if __name__ == "__main__":
     phase = 'test'
 
     cfg = Config(
-        EXP_NAME='kmat0108',
+        EXP_NAME='kmat0121',
         PRETRAINED_MODEL_PATH='./',
         MODEL_SIZE=ModelSize.LARGE)
 
@@ -723,5 +702,5 @@ if __name__ == "__main__":
                           parse_dates=["start_time", "end_time", "snap_time"])
 
     df_side, df_end = cnn_features_test(test_df, te_tracking, te_helmets, te_meta)
-    df_side.to_csv('kmat0108_side_df.csv', index=False)
-    df_end.to_csv('kmat0108_end_df.csv', index=False)
+    df_side.to_csv('kmat0121_side_df.csv', index=False)
+    df_end.to_csv('kmat0121_end_df.csv', index=False)
