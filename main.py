@@ -299,7 +299,6 @@ def main(args):
         MODEL_SIZE=ModelSize.HUGE,
         ENABLE_MULTIPROCESS=args.enable_multiprocess,
         DEBUG=args.debug)
-
     if args.debug:
         set_debugger()
         cfg.MODEL_SIZE = ModelSize.SMALL
@@ -317,7 +316,7 @@ def parse_args():
     parser.add_argument("--camaro_path", "-c", default="", type=str)
     parser.add_argument("--kmat_end_path", "-e", default="", type=str)
     parser.add_argument("--kmat_side_path", "-s", default="", type=str)
-    parser.add_argument("--enable_multiprocess", "-m", default=True, type=bool)
+    parser.add_argument("--enable_multiprocess", "-m", action='store_true')
     return parser.parse_args()
 
 

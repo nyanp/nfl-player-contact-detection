@@ -74,19 +74,16 @@ def interpolate_features(df, window_size=11, columns_to_roll=['cnn_pred_Sideline
     inputs_list = [(game_play_df, window_size, columns_to_roll) for _, game_play_df in df.groupby("game_play")]
 
     rolled_dfs = []
-    # if enable_multiprocess:
-    #     pool = Pool(processes=cpu_count())
-    #     with tqdm(total=len(inputs_list)) as t:
-    #         for rolled_df in pool.imap_unordered(_interpolate_game_play_features, inputs_list):
-    #             rolled_dfs.append(rolled_df)
-    #             t.update(1)
-    # else:
-    #     for inputs in inputs_list:
-    #         rolled_df = _interpolate_game_play_features(inputs)
-    #         rolled_dfs.append(rolled_df)
-    for inputs in inputs_list:
-        rolled_df = _interpolate_game_play_features(inputs)
-        rolled_dfs.append(rolled_df)
+    if enable_multiprocess:
+        pool = Pool(processes=cpu_count())
+        with tqdm(total=len(inputs_list)) as t:
+            for rolled_df in pool.imap_unordered(_interpolate_game_play_features, inputs_list):
+                rolled_dfs.append(rolled_df)
+                t.update(1)
+    else:
+        for inputs in inputs_list:
+            rolled_df = _interpolate_game_play_features(inputs)
+            rolled_dfs.append(rolled_df)
     rolled_dfs = pd.concat(rolled_dfs, axis=0).reset_index(drop=True)
     df = pd.merge(df, rolled_dfs, how="left", on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"])
     return df
