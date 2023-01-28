@@ -10,7 +10,7 @@ def search_best_threshold(y_true, y_pred):
 
     x0 = [0.5]
     result = minimize(func, x0,  method="nelder-mead")
-    
+
     return result.x[0]
 
 def binarize_pred(y_pred, threshold, threshold2, threshold2_mask):
@@ -33,7 +33,7 @@ def search_best_threshold_pair(y_true, y_pred, is_ground):
 def evaluate_pred_df(val_df, pred_df):
     val_results = {}
     pred_df = val_df.merge(pred_df.drop('step', axis=1), on=['game_play', 'frame', 'nfl_player_id_1', 'nfl_player_id_2'], how='left')
-    
+
     is_ground = (pred_df['nfl_player_id_2'] == GROUND_ID).values
     th0, th1 = search_best_threshold_pair(pred_df.contact.values, pred_df.preds.values, is_ground)
     score = matthews_corrcoef(pred_df.contact,  binarize_pred(pred_df.preds, th0, th1, is_ground))
@@ -41,7 +41,7 @@ def evaluate_pred_df(val_df, pred_df):
     val_results['inter_th'] = th0
     val_results['ground_th'] = th1
     val_results['total_score'] = score
-    
+
     pred_g_df = pred_df.query('nfl_player_id_2 == @GROUND_ID')
     score = matthews_corrcoef(pred_g_df.contact,  pred_g_df.preds>th0)
     print(f'ground score={score:.3f} best_th={th0:.3f}')
@@ -51,7 +51,7 @@ def evaluate_pred_df(val_df, pred_df):
     score = matthews_corrcoef(pred_inter_df.contact,  pred_inter_df.preds>th1)
     print(f'inter score={score:.3f} best_th={th1:.3f}')
     val_results['inter_score'] = score
-    
+
     pred_valid_df = pred_df.query('masks == True')
     is_ground = (pred_valid_df['nfl_player_id_2'] == GROUND_ID).values
     th0, th1 = search_best_threshold_pair(pred_valid_df.contact.values, pred_valid_df.preds.values, is_ground)
@@ -60,5 +60,5 @@ def evaluate_pred_df(val_df, pred_df):
     val_results['mask_inter_th'] = th0
     val_results['mask_ground_th'] = th1
     val_results['mask_score'] = score
-    
+
     return val_results

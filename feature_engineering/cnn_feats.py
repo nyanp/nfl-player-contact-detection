@@ -23,11 +23,11 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred']
     df = df.merge(camaro_df[merge_cols], how='left')
 
-    # if camaro_df2 is None:
-    #     camaro_df2 = pd.read_csv('../pipeline/exp076_exp079_val_preds.csv')
-    #     camaro_df2 = camaro_df2.rename(columns={'preds': 'camaro_pred2'})
-    #     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred2']
-    #     df = df.merge(camaro_df2[merge_cols], how='left')
+    if camaro_df2 is None:
+        camaro_df2 = pd.read_csv('../pipeline/exp090_exp091_val_preds.csv')
+        camaro_df2 = camaro_df2.rename(columns={'preds': 'camaro_pred2'})
+        merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred2']
+        df = df.merge(camaro_df2[merge_cols], how='left')
 
     # if camaro_df is None:
     #     camaro_df = pd.read_csv('../pipeline/output/exp064_exp048_fiix_coords_scale/oof_val_preds_agg_df.csv')
@@ -57,5 +57,124 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
 
     merge_cols = ['step', 'game_play', 'nfl_player_id_1', 'nfl_player_id_2', 'cnn_pred_Sideline']
     df = df.merge(kmat_side_df[merge_cols], how='left')
+
+    return df
+
+
+def add_cnn_agg_features(df):
+    def g_con_around_feature(df_train, dist_thresh=1.5, columns=['cnn_pred_Sideline_roll11', 'cnn_pred_Endzone_roll11']):
+        """
+        周辺が倒れている場合、その人も倒れている。
+        画像中の隠れているプレイヤに対するグラウンドコンタクト紐づけ　兼　アサインメントミスの補助
+        """
+        print(df_train.shape)
+        add_columns = [n + "_g_contact_around" for n in columns]
+        df_train_g = df_train.loc[df_train["nfl_player_id_2"] == -
+                                  1, ["game_play", "step", "nfl_player_id_1"] +
+                                  columns].rename(columns={c: a for c, a in zip(columns, add_columns)})
+        p_pairs = df_train.loc[df_train["nfl_player_id_2"] != -1, ["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "distance"]]
+        p_pairs = p_pairs[p_pairs["distance"] < dist_thresh]
+        p_pairs = pd.concat([p_pairs, p_pairs.rename(columns={"nfl_player_id_1": "nfl_player_id_2", "nfl_player_id_2": "nfl_player_id_1"})], axis=0)
+        p_pairs = pd.merge(p_pairs,
+                           df_train_g,
+                           on=["game_play", "step", "nfl_player_id_1"], how="left")
+        # 周辺プレイヤの地面コンタクト(自分以外)をとりあえずsumる。
+        p_pairs = p_pairs.groupby(["game_play", "step", "nfl_player_id_2"])[add_columns].sum().reset_index()  # ("sum", "mean")
+        p_pairs = p_pairs.rename(columns={"nfl_player_id_2": "nfl_player_id_1"})
+
+        df_train = pd.merge(df_train,
+                            p_pairs,
+                            on=["game_play", "step", "nfl_player_id_1"], how="left")
+
+        # df_train.loc[df_train["nfl_player_id_2"]!=-1, add_columns] = np.nan
+
+        return df_train
+
+    def g_conact_as_condition(df_train, score_columns=['cnn_pred_Sideline_roll5', 'cnn_pred_Endzone_roll5'], dist_ratio=1.):
+        """
+        同じ状態(高さ姿勢)のものはコンタクトしやすい
+        グラウンドコンタクトの発生状態を高さ姿勢と考えてペア間の高さ姿勢を比較する
+        あわせて、疑似的な距離を算出する。
+        """
+        print(df_train.shape)
+        temp_columns = [n + "_as_g_contact_cond" for n in score_columns]
+        dev_columns = [n + "_dev_as_g_contact_cond" for n in score_columns]
+        dist_columns = [n + "_dist_as_g_contact_cond" for n in score_columns]
+
+        df_train_g = df_train.loc[df_train["nfl_player_id_2"] == -1, ["game_play", "step", "nfl_player_id_1"] +
+                                  score_columns].rename(columns={c: a for c, a in zip(score_columns, temp_columns)})
+
+        df_train = pd.merge(df_train,
+                            df_train_g,
+                            on=["game_play", "step", "nfl_player_id_1"], how="left").rename(columns={c: c + "_1" for c in temp_columns})
+        df_train = pd.merge(df_train,
+                            df_train_g.rename(columns={"nfl_player_id_1": "nfl_player_id_2"}),
+                            on=["game_play", "step", "nfl_player_id_2"], how="left").rename(columns={c: c + "_2" for c in temp_columns})
+
+        for dist_c, dev_c, temp_c in zip(dist_columns, dev_columns, temp_columns):
+            df_train[dev_c] = np.abs(df_train[temp_c + "_2"] - df_train[temp_c + "_1"])
+            df_train[dist_c] = np.sqrt((df_train[dev_c] * dist_ratio)**2 + df_train["distance"]**2)
+
+        df_train = df_train.drop(columns=[c + "_1" for c in temp_columns] + [c + "_2" for c in temp_columns])
+
+        return df_train
+
+    def p_con_shift_feature(df_train, step_offset=5, score_columns=['cnn_pred_Sideline_roll11', 'cnn_pred_Endzone_roll11']):
+        """
+        過去にコンタクトがあった人は再度何かしらのコンタクト(特に地面と?)することが多い。
+        (逆に地面コンタクトしている人はさかのぼると誰かにコンタクトしていると思う。TODO?)
+        """
+        print(df_train.shape)
+        add_columns = [n + f"_p_contact_past{step_offset}" for n in score_columns]
+        df_train_p = df_train.loc[df_train["nfl_player_id_2"] != -
+                                  1, ["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"] +
+                                  score_columns].rename(columns={c: a for c, a in zip(score_columns, add_columns)})
+        df_train_p = pd.concat([df_train_p, df_train_p.rename(
+            columns={"nfl_player_id_1": "nfl_player_id_2", "nfl_player_id_2": "nfl_player_id_1"})], axis=0)
+        df_train_p = df_train_p.groupby(["game_play", "step", "nfl_player_id_1"])[add_columns].sum().reset_index()
+        df_train_p["step"] = df_train_p["step"] + step_offset
+
+        df_train = pd.merge(df_train,
+                            df_train_p,
+                            on=["game_play", "step", "nfl_player_id_1"], how="left").rename(columns={c: c + "_1" for c in add_columns})
+        df_train = pd.merge(df_train,
+                            df_train_p.rename(columns={"nfl_player_id_1": "nfl_player_id_2"}),
+                            on=["game_play", "step", "nfl_player_id_2"], how="left").rename(columns={c: c + "_2" for c in add_columns})
+
+        return df_train
+
+    df = g_con_around_feature(
+        df,
+        dist_thresh=1.5,
+        columns=[
+            'cnn_pred_Sideline_roll11',
+            'cnn_pred_Endzone_roll11',
+            'camaro_pred_roll11',
+            'camaro_pred2_roll11'])
+    df = g_con_around_feature(
+        df,
+        dist_thresh=0.75,
+        columns=[
+            'cnn_pred_Sideline_roll5',
+            'cnn_pred_Endzone_roll5',
+            'camaro_pred_roll5',
+            'camaro_pred2_roll5'])
+    df = p_con_shift_feature(
+        df,
+        step_offset=5,
+        score_columns=[
+            'cnn_pred_Sideline_roll5',
+            'cnn_pred_Endzone_roll5',
+            'camaro_pred_roll5',
+            'camaro_pred2_roll5'])
+    df = p_con_shift_feature(
+        df,
+        step_offset=-5,
+        score_columns=[
+            'cnn_pred_Sideline_roll5',
+            'cnn_pred_Endzone_roll5',
+            'camaro_pred_roll5',
+            'camaro_pred2_roll5'])
+    # df = g_conact_as_condition(df, score_columns = ['cnn_pred_Sideline_roll11', 'cnn_pred_Endzone_roll11'])
 
     return df

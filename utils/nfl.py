@@ -152,6 +152,36 @@ def bbox_iou(df, view):
     return iou
 
 
+def add_bbox_move_features(df):
+    shifts = [1]
+    for shift in shifts:
+        for view in ["Endzone", "Sideline"]:
+            for pl in ["1", "2"]:
+                for xy in ["x", "y"]:
+                    df[f"bbox_center_{xy}_{view}_{pl}_m{shift}"] = df.groupby(["game_play", "nfl_player_id_1", "nfl_player_id_2"])[
+                        f"bbox_center_{xy}_{view}_{pl}"].shift(shift)
+                    df[f"bbox_center_{xy}_{view}_{pl}_p{shift}"] = df.groupby(["game_play", "nfl_player_id_1", "nfl_player_id_2"])[
+                        f"bbox_center_{xy}_{view}_{pl}"].shift(-shift)
+                df[f"bbox_move_{view}_{pl}_m{shift}"] = distance(
+                    df[f"bbox_center_x_{view}_{pl}_m{shift}"],
+                    df[f"bbox_center_y_{view}_{pl}_m{shift}"],
+                    df[f"bbox_center_x_{view}_{pl}"],
+                    df[f"bbox_center_y_{view}_{pl}"],
+                )
+                df[f"bbox_move_{view}_{pl}_p{shift}"] = distance(
+                    df[f"bbox_center_x_{view}_{pl}_p{shift}"],
+                    df[f"bbox_center_y_{view}_{pl}_p{shift}"],
+                    df[f"bbox_center_x_{view}_{pl}"],
+                    df[f"bbox_center_y_{view}_{pl}"],
+                )
+                for xy in ["x", "y"]:
+                    del df[f"bbox_center_{xy}_{view}_{pl}_m{shift}"]
+                    del df[f"bbox_center_{xy}_{view}_{pl}_p{shift}"]
+            df[f"bbox_move_{view}_m{shift}_mean_1"] = df.groupby(["nfl_player_id_1", "game_play"])[f"bbox_move_{view}_1_m{shift}"].transform("mean")
+            df[f"bbox_move_{view}_m{shift}_max_1"] = df.groupby(["nfl_player_id_1", "game_play"])[f"bbox_move_{view}_1_m{shift}"].transform("max")
+    return df
+
+
 def merge_helmet(df, helmet, meta):
     start_times = meta[["game_play", "start_time"]].drop_duplicates()
     start_times["start_time"] = pd.to_datetime(start_times["start_time"])
@@ -224,6 +254,7 @@ def merge_helmet(df, helmet, meta):
 
         df[f"bbox_iou_{view}"] = bbox_iou(df, view)
 
+    df = add_bbox_move_features(df)
     # del df["datetime_ngs"]
     del df["datetime"]
     return reduce_dtype(df)

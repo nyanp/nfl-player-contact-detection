@@ -2,6 +2,8 @@ import pandas as pd
 from tqdm.auto import tqdm
 from scipy.optimize import minimize
 from sklearn.metrics import matthews_corrcoef
+import optuna
+optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
 def search_best_threshold(y_true, y_pred):
@@ -30,6 +32,17 @@ def search_best_threshold_pair(y_true, y_pred, is_ground):
     result = minimize(func, x0, method="nelder-mead")
 
     return result.x[0], result.x[1]
+
+
+def search_best_threshold_pair_optuna(y_true, y_pred, is_ground, n_trials=100):
+    def objective(trial):
+        th1 = trial.suggest_float('th1', 0.1, 0.6)
+        th2 = trial.suggest_float('th2', 0.1, 0.6)
+        score = matthews_corrcoef(y_true, binarize_pred(y_pred, th1, th2, is_ground))
+        return -score
+    study = optuna.create_study()  # Create a new study.
+    study.optimize(objective, n_trials=n_trials)  # Invoke optimization of the objective function.
+    return study.best_params["th1"], study.best_params["th2"]
 
 
 def metrics(

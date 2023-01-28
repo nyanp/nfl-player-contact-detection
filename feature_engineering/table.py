@@ -15,6 +15,17 @@ def add_bbox_features(df: pd.DataFrame) -> pd.DataFrame:
         df = add_bbox_from_step0_feature(df, view)
         df = add_shift_feature(df, view)
         df = add_diff_features(df, view)
+        df = add_agg_bbox_feature(df, view)
+    return df
+
+
+def add_agg_bbox_feature(df: pd.DataFrame, view: str) -> pd.DataFrame:
+    for agg in ['min', 'mean', 'std']:
+        df[f'bbox_center_{view}_distance_{agg}'] = df.groupby(['game_play', 'nfl_player_id_1', 'nfl_player_id_2'])[
+            f'bbox_center_{view}_distance'].transform(agg)
+        df[f'bbox_center_y_{view}_1_{agg}'] = df.groupby(['game_play', 'nfl_player_id_1'])[f'bbox_center_y_{view}_1'].transform(agg)
+
+    df[f'bbox_center_{view}_distance_ratio'] = df[f'bbox_center_{view}_distance_min'] / df[f'bbox_center_{view}_distance']
     return df
 
 

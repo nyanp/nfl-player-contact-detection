@@ -1,4 +1,4 @@
-from feature_engineering.cnn_feats import add_cnn_features, add_cnn_shift_diff_feature
+from feature_engineering.cnn_feats import add_cnn_agg_features, add_cnn_features, add_cnn_shift_diff_feature
 from feature_engineering.interpolate_features import interpolate_features
 from feature_engineering.point_set_matching import add_p2p_matching_features
 from feature_engineering.table import (
@@ -41,7 +41,7 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
             window_size=5,
             columns_to_roll=[
                 'camaro_pred',
-                # 'camaro_pred2',
+                'camaro_pred2',
                 'cnn_pred_Sideline',
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
@@ -53,7 +53,7 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
             window_size=11,
             columns_to_roll=[
                 'camaro_pred',
-                # 'camaro_pred2',
+                'camaro_pred2',
                 'cnn_pred_Sideline',
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
@@ -65,12 +65,14 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
             window_size=21,
             columns_to_roll=[
                 'camaro_pred',
-                # 'camaro_pred2',
+                'camaro_pred2',
                 'cnn_pred_Sideline',
                 'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'],
             enable_multiprocess=enable_multiprocess)
+
+        feature_df = add_cnn_agg_features(feature_df)
 
         feature_df = add_cnn_shift_diff_feature(feature_df, columns=[
             'camaro_pred',

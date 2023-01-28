@@ -14,7 +14,7 @@ from feature_engineering.point_set_matching import match_p2p_with_cache
 from utils.debugger import set_debugger
 from utils.general import (LabelEncoders, LGBMSerializer, make_oof,
                            plot_importance, timer)
-from utils.metrics import binarize_pred, metrics, search_best_threshold_pair, summarize_per_play_mcc
+from utils.metrics import binarize_pred, metrics, search_best_threshold_pair_optuna, summarize_per_play_mcc
 from utils.nfl import (
     Config,
     ModelSize,
@@ -102,11 +102,11 @@ def train_cv(
 
     with timer("lgb.cv"):
         ret = lgb.cv(lgb_params, ds_train,
-                     num_boost_round=3000,
+                     num_boost_round=4000,
                      folds=split,
                      return_cvbooster=True,
                      callbacks=[
-                         lgb.early_stopping(stopping_rounds=100, verbose=True),
+                        #  lgb.early_stopping(stopping_rounds=100, verbose=True),
                          lgb.log_evaluation(25),
                          #  wandb_callback()
                      ])
@@ -127,7 +127,7 @@ def train_cv(
 
         if search_threshold:
             with timer("find best threshold"):
-                threshold_1, threshold_2 = search_best_threshold_pair(
+                threshold_1, threshold_2 = search_best_threshold_pair_optuna(
                     y_train, oof, is_ground)
 
             y_train_all = original_df["contact"]
@@ -180,6 +180,7 @@ def train(cfg: Config):
     wandb.init(
         project=cfg.PROJECT,
         name=f'{cfg.EXP_NAME}',
+        entity='nfl-osaka-tigers',
         config=cfg,
         reinit=True,
         mode=mode)
@@ -291,7 +292,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp033_exp029_update_kmat_cnn',
+        EXP_NAME='exp037_exp036_cnn_aug',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,
