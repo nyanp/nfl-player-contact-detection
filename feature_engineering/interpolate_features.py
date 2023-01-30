@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
+from utils.general import reduce_dtype
+
 
 class PairRollHolder:
     def __init__(self, window_size, all_players):
@@ -63,7 +65,7 @@ def _interpolate_game_play_features(args):
         game_play_df[f"{column}_roll{window_size}"] = game_play_df["key"].map(holder.roll_map)
 
     keep_cols = ["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"] + feature_names
-    return game_play_df[keep_cols]
+    return reduce_dtype(game_play_df[keep_cols])
 
 
 def interpolate_features(df, window_size=11, columns_to_roll=['cnn_pred_Sideline', 'cnn_pred_Endzone'], enable_multiprocess=True):

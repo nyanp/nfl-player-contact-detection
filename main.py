@@ -292,7 +292,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp040_exp039_bbox_std_feats',
+        EXP_NAME='exp041_exp040_camaro2',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,

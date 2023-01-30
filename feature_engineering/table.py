@@ -156,7 +156,7 @@ def add_basic_features(df):
         df["direction_1"], df["orientation_1"])
     df["anglediff_dir2_ori2"] = angle_diff(
         df["direction_2"], df["orientation_2"])
-    return df
+    return reduce_dtype(df)
 
 
 def add_tracking_agg_features(df, tracking):
@@ -215,7 +215,7 @@ def add_tracking_agg_features(df, tracking):
         )
 
     df = pd.merge(df, agg, on=["game_play", "step"], how="left")
-    return df
+    return reduce_dtype(df)
 
 
 def add_distance_around_player(df):
@@ -285,7 +285,7 @@ def add_distance_around_player(df):
     df = _merge_stacked_df_pairwise(df, stacked)
     df["step_diff_to_min_distance"] = df["step"] - \
         df["idxmin_distance_aronud_player_pair"]
-    return df
+    return reduce_dtype(df)
 
 
 def add_step_feature(df, tracking):
@@ -303,7 +303,7 @@ def add_step_feature(df, tracking):
     #step_agg.columns = ["step_min_2", "step_max_2"]
     #df = pd.merge(df, step_agg, left_on="game_play", right_index=True, how="left")
     #df["step_ratio_2"] = df["step"] / df["step_max_2"]
-    return df
+    return reduce_dtype(df)
 
 
 def add_aspect_ratio_feature(df, drop_original=False):
@@ -315,7 +315,7 @@ def add_aspect_ratio_feature(df, drop_original=False):
             if drop_original:
                 del df[f"height_{view}{postfix}"]
                 del df[f"width_{view}{postfix}"]
-    return df
+    return reduce_dtype(df)
 
 
 def add_misc_features_after_agg(df):
@@ -366,7 +366,7 @@ def add_misc_features_after_agg(df):
     # 進行方向以外の加速度成分
     # df["sa_ratio_1"] = np.abs(df["sa_1"] / df["acceleration_1"])
     # df["sa_ratio_2"] = np.abs(df["sa_2"] / df["acceleration_2"])
-    return df
+    return reduce_dtype(df)
 
 
 def add_t0_feature(df, tracking):
@@ -417,7 +417,7 @@ def add_t0_feature(df, tracking):
         df["x_position_2"],
         df["y_position_2"]
     )
-    return df
+    return reduce_dtype(df)
 
 
 def add_shift_of_player(df, tracking, shifts, add_diff=False, player_id="1"):
@@ -459,7 +459,7 @@ def add_shift_of_player(df, tracking, shifts, add_diff=False, player_id="1"):
 
     tracking["step"] = step_orig
 
-    return df
+    return reduce_dtype(df)
 
 
 def tracking_prep(tracking):
@@ -570,7 +570,7 @@ def add_interceptor_feature(df):
     df = pd.merge(df, interceptor_player1, on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"], how="left")
     df = pd.merge(df, interceptor_player2, on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"], how="left")
 
-    return df
+    return reduce_dtype(df)
 
 
 def add_bbox_std_overlap_feature(df):
@@ -587,7 +587,7 @@ def add_bbox_std_overlap_feature(df):
         df[f"bbox_x_std_overlap_{view}"] = (np.minimum(xc1 + w1 / 2, xc2 + w2 / 2) - np.maximum(xc1 - w1 / 2, xc2 - w2 / 2)) / (w1 + w2)
         df[f"bbox_y_std_overlap_{view}"] = (np.minimum(yc1 + h1 / 2, yc2 + h2 / 2) - np.maximum(yc1 - h1 / 2, yc2 - h2 / 2)) / (h1 + h2)
 
-    return df
+    return reduce_dtype(df)
 
 
 def bbox_y_endzone_diff_feature(df, distance_th=3.0):
@@ -628,7 +628,7 @@ def bbox_y_endzone_diff_feature(df, distance_th=3.0):
 
     del df["neighbor_y_mean_1"]
     del df["neighbor_y_w_mean_1"]
-    return df
+    return reduce_dtype(df)
 
 
 def add_bbox_std_features(df):
@@ -637,7 +637,7 @@ def add_bbox_std_features(df):
         std_size = np.sqrt(df[f"height_{view}_mean"] * df[f"width_{view}_mean"])
         df[f'bbox_center_{view}_distance_std'] = df[f'bbox_center_{view}_distance'] / std_size
 
-    return df
+    return reduce_dtype(df)
 
 
 def add_image_coords_features(df):
@@ -681,7 +681,7 @@ def add_image_coords_features(df):
         df['p1_end_img_coords_y'].values,
         df['p2_end_img_coords_x'].values,
         df['p2_end_img_coords_y'].values)
-    return df
+    return reduce_dtype(df)
 
 
 def add_distance_agg_features(df):
@@ -697,4 +697,4 @@ def add_distance_agg_features(df):
                                         .set_index('level_3')
                                         .rename(columns={'distance': f'distance_window{roll}'})[f'distance_window{roll}'])
 
-    return df
+    return reduce_dtype(df)
