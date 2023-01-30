@@ -103,11 +103,8 @@ def add_shift_feature(df: pd.DataFrame, view: str) -> pd.DataFrame:
     shift_columns = [f'distance_from_step0_{view}_1',
                      f'distance_from_step0_{view}_2',
                      f'bbox_center_{view}_distance',
-                     f'bbox_center_x_{view}_1',
                      f'bbox_center_y_{view}_1',
-                     # f'bbox_center_x_{view}_2',
-                     # f'bbox_center_y_{view}_2',
-                     ]
+                     f'bbox_center_y_std_{view}_1']
     for i in [-5, -3, -1, 1, 3, 5]:
 
         _tmp = df.groupby(['game_play', 'nfl_player_id_1', 'nfl_player_id_2'])[
@@ -133,11 +130,8 @@ def add_diff_features(df: pd.DataFrame, view: str) -> pd.DataFrame:
     shift_columns = [f'distance_from_step0_{view}_1',
                      f'distance_from_step0_{view}_2',
                      f'bbox_center_{view}_distance',
-                     f'bbox_center_x_{view}_1',
                      f'bbox_center_y_{view}_1',
-                     # f'bbox_center_x_{view}_2',
-                     # f'bbox_center_y_{view}_2',
-                     ]
+                     f'bbox_center_y_std_{view}_1']
 
     for column in shift_columns:
         df = add_diff_feature(df, column, [-5, -3, -1, 1, 3, 5])
@@ -687,4 +681,20 @@ def add_image_coords_features(df):
         df['p1_end_img_coords_y'].values,
         df['p2_end_img_coords_x'].values,
         df['p2_end_img_coords_y'].values)
+    return df
+
+
+def add_distance_agg_features(df):
+    for shift in [-1, 1]:
+        df[f'distance_shift{shift}'] = df.groupby(['game_play', 'nfl_player_id_1', 'nfl_player_id_2'])['distance'].shift(1)
+
+    for roll in [5, 11, 21]:
+        df[f'distance_window{roll}'] = (df.groupby(['game_play', 'nfl_player_id_1', 'nfl_player_id_2'])['distance']
+                                        .rolling(roll)
+                                        .mean()
+                                        .reset_index()
+                                        .sort_values('level_3')
+                                        .set_index('level_3')
+                                        .rename(columns={'distance': f'distance_window{roll}'})[f'distance_window{roll}'])
+
     return df

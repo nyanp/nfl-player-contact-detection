@@ -213,14 +213,17 @@ def merge_helmet(df, helmet, meta):
     df["datetime_ngs"] = pd.to_datetime(df["datetime"], utc=True)
 
     # 追加
-    feature_cols = ["width", "height", "bbox_center_x", "bbox_center_y"]
+    feature_cols = ["width", "height", "bbox_center_x", "bbox_center_y",
+                    "bbox_center_x_std", "bbox_center_y_std"]
 
-    helmet_agg = helmet.groupby(["datetime_ngs", "nfl_player_id", "view"]).agg({
-        "width": "mean",
-        "height": "mean",
-        "bbox_center_x": "mean",
-        "bbox_center_y": "mean",
-    }).reset_index()
+    helmet_agg = helmet.groupby(["datetime_ngs", "nfl_player_id", "view"]).agg(
+        width=pd.NamedAgg("width", "mean"),
+        height=pd.NamedAgg("height", "mean"),
+        bbox_center_x=pd.NamedAgg("bbox_center_x", "mean"),
+        bbox_center_y=pd.NamedAgg("bbox_center_y", "mean"),
+        bbox_center_x_std=pd.NamedAgg("bbox_center_x", "std"),
+        bbox_center_y_std=pd.NamedAgg("bbox_center_y", "std"),
+    ).reset_index()
 
     for view in ["Sideline", "Endzone"]:
         helmet_ = helmet_agg[helmet_agg["view"] == view].drop("view", axis=1)
