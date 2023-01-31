@@ -93,7 +93,7 @@ class Config:
     HELMET_DIR: str = "../input/nfl-player-contact-detection/"
     CACHE: str = "./data/ver0121"
     USE_PRETRAINED_MODEL: bool = False
-    PRETRAINED_MODEL_PATH: str = "../input/nfl-baseline-oof"
+    PRETRAINED_MODEL_PATH: Optional[str] = None
     SPLIT_FILE_PATH: str = "../input/nfl-game-fold/game_fold.csv"
     MODEL_SIZE: ModelSize = ModelSize.LARGE
     DEBUG: bool = False

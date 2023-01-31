@@ -229,9 +229,8 @@ def train(cfg: Config):
 
 
 def inference(cfg: Config):
-    save_dir = f'output/{cfg.EXP_NAME}'
-    serializer = LGBMSerializer.from_file(
-        os.path.join(cfg.PRETRAINED_MODEL_PATH, "lgb"), save_dir)
+    save_dir = cfg.PRETRAINED_MODEL_PATH or f'output/{cfg.EXP_NAME}'
+    serializer = LGBMSerializer.from_file("lgb", save_dir)
     cvbooster = serializer.booster
     encoder = serializer.encoders
     threshold_1 = serializer.threshold_1
@@ -307,6 +306,7 @@ def main(args):
         EXP_NAME='exp042_exp041_oof_pseudo',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
+        CAMARO_DF2_PATH=args.camaro2_path,
         KMAT_END_DF_PATH=args.kmat_end_path,
         KMAT_SIDE_DF_PATH=args.kmat_side_path,
         MODEL_SIZE=ModelSize.HUGE,
@@ -327,6 +327,7 @@ def parse_args():
     parser.add_argument("--inference_only", "-i", action="store_true")
     parser.add_argument("--lgbm_path", "-l", default="", type=str)
     parser.add_argument("--camaro_path", "-c", default="", type=str)
+    parser.add_argument("--camaro2_path", "-c2", default="", type=str)
     parser.add_argument("--kmat_end_path", "-e", default="", type=str)
     parser.add_argument("--kmat_side_path", "-s", default="", type=str)
     parser.add_argument("--enable_multiprocess", "-m", action='store_true')
