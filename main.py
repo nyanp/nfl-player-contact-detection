@@ -97,14 +97,16 @@ def train_cv(
         # print(f"features: {feature_names}")
         print(f"category: {list(encoder.encoders.keys())}")
 
-        # pseudo labeling from exp041
-        pseudo_y_train = np.load('output/exp041_exp040_camaro2/oof.npy')
-        serializer = LGBMSerializer.from_file("lgb", 'output/exp041_exp040_camaro2')
-        threshold_1 = serializer.threshold_1
-        threshold_2 = serializer.threshold_2
-        pseudo_y_pred = binarize_pred(pseudo_y_train, threshold_1, threshold_2, is_ground)
+        # pseudo labeling from exp041, turned off #########################################
+        # pseudo_y_train = np.load('output/exp041_exp040_camaro2/oof.npy')
+        # serializer = LGBMSerializer.from_file("lgb", 'output/exp041_exp040_camaro2')
+        # threshold_1 = serializer.threshold_1
+        # threshold_2 = serializer.threshold_2
+        # pseudo_y_pred = binarize_pred(pseudo_y_train, threshold_1, threshold_2, is_ground)
+        # ds_train = lgb.Dataset(X_train, pseudo_y_pred, feature_name=feature_names)
+        ###################################################################################
 
-        ds_train = lgb.Dataset(X_train, pseudo_y_pred, feature_name=feature_names)
+        ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names)
         gc.collect()
 
     with timer("lgb.cv"):
@@ -259,6 +261,8 @@ def inference(cfg: Config):
             df_args.append(pd.read_csv(cfg.KMAT_END_DF_PATH))
         if cfg.KMAT_SIDE_DF_PATH:
             df_args.append(pd.read_csv(cfg.KMAT_SIDE_DF_PATH))
+        if cfg.CAMARO_DF2_PATH:
+            df_args.append(pd.read_csv(cfg.CAMARO_DF2_PATH))
 
     feature_cols = cvbooster.feature_name()[0]
 
@@ -303,7 +307,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp042_exp041_oof_pseudo',
+        EXP_NAME='exp043_no_pseudo',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,
