@@ -12,7 +12,7 @@ DIST_LIMIT = 3  # 3 times larger than average bbox size
 
 TRAIN_HELMET_PATH = '../input/nfl-player-contact-detection/train_baseline_helmets.csv'
 TEST_HELMET_PATH = '../input/nfl-player-contact-detection/test_baseline_helmets.csv'
-FOLD_PATH = "../input/game_fold.csv"
+FOLD_PATH = "../input/nfl-game-fold/game_fold.csv"
 TRAIN_SAVE_PATH = './data/train_interpolated_helmets.csv'
 TEST_SAVE_PATH = './data/test_interpolated_helmets.csv'
 
