@@ -97,7 +97,14 @@ def train_cv(
         # print(f"features: {feature_names}")
         print(f"category: {list(encoder.encoders.keys())}")
 
-        ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names)
+        # pseudo labeling from exp041
+        pseudo_y_train = np.load('output/exp041_exp040_camaro2/oof.npy')
+        serializer = LGBMSerializer.from_file("lgb", 'output/exp041_exp040_camaro2')
+        threshold_1 = serializer.threshold_1
+        threshold_2 = serializer.threshold_2
+        pseudo_y_pred = binarize_pred(pseudo_y_train, threshold_1, threshold_2, is_ground)
+
+        ds_train = lgb.Dataset(X_train, pseudo_y_pred, feature_name=feature_names)
         gc.collect()
 
     with timer("lgb.cv"):
@@ -122,8 +129,9 @@ def train_cv(
     if calc_oof:
         oof = make_oof(ret["cvbooster"], X_train, y_train, split)
 
-        np.save("X_train.npy", X_train)
-        np.save("oof.npy", oof)
+        save_dir = f'output/{cfg.EXP_NAME}'
+        np.save(f"{save_dir}/X_train.npy", X_train)
+        np.save(f"{save_dir}/oof.npy", oof)
 
         if search_threshold:
             with timer("find best threshold"):
@@ -185,6 +193,9 @@ def train(cfg: Config):
         reinit=True,
         mode=mode)
 
+    save_dir = f'output/{cfg.EXP_NAME}'
+    os.makedirs(save_dir, exist_ok=True)
+
     with timer("load file"):
         tr_tracking = read_csv_with_cache("train_player_tracking.csv", cfg.INPUT, cfg.CACHE, usecols=TRACK_COLS)
         train_df = read_csv_with_cache("train_labels.csv", cfg.INPUT, cfg.CACHE, usecols=TRAIN_COLS)
@@ -214,12 +225,13 @@ def train(cfg: Config):
     gc.collect()
 
     serializer = LGBMSerializer(cvbooster, encoder, threshold_1, threshold_2)
-    serializer.to_file("lgb")
+    serializer.to_file("lgb", save_dir)
 
 
 def inference(cfg: Config):
+    save_dir = f'output/{cfg.EXP_NAME}'
     serializer = LGBMSerializer.from_file(
-        os.path.join(cfg.PRETRAINED_MODEL_PATH, "lgb"))
+        os.path.join(cfg.PRETRAINED_MODEL_PATH, "lgb"), save_dir)
     cvbooster = serializer.booster
     encoder = serializer.encoders
     threshold_1 = serializer.threshold_1
@@ -292,7 +304,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp041_exp040_camaro2',
+        EXP_NAME='exp042_exp041_oof_pseudo',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         KMAT_END_DF_PATH=args.kmat_end_path,
