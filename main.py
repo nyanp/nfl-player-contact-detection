@@ -106,7 +106,14 @@ def train_cv(
         # ds_train = lgb.Dataset(X_train, pseudo_y_pred, feature_name=feature_names)
         ###################################################################################
 
-        ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names)
+        # ignore strange examples by exp043 oof
+        THRESHOLD = 0.99
+        oof = np.load('output/exp043_no_pseudo/oof.npy')
+        weight = (np.abs(y_train - oof) < THRESHOLD).astype(np.float32)
+        print(f'ignore {weight.sum()} samples out of {len(weight)} samples')
+        ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names, weight=weight)
+
+        # ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names)
         gc.collect()
 
     with timer("lgb.cv"):
@@ -307,7 +314,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp043_no_pseudo',
+        EXP_NAME='exp044_ignore_hard_examples_for_043',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,
