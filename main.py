@@ -26,6 +26,8 @@ from utils.nfl import (
     TRACK_COLS,
     NON_FEATURE_COLS)
 
+pd.options.mode.chained_assignment = None  # default='warn'
+
 
 def get_lgb_params(cfg):
     lgb_params = {
@@ -106,14 +108,16 @@ def train_cv(
         # ds_train = lgb.Dataset(X_train, pseudo_y_pred, feature_name=feature_names)
         ###################################################################################
 
-        # ignore strange examples by exp043 oof
-        THRESHOLD = 0.99
-        oof = np.load('output/exp043_no_pseudo/oof.npy')
-        weight = (np.abs(y_train - oof) < THRESHOLD).astype(np.float32)
-        print(f'ignore {weight.sum()} samples out of {len(weight)} samples')
-        ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names, weight=weight)
+        # # ignore strange examples by exp043 oof
+        # THRESHOLD = 0.99
+        # oof = np.load('output/exp043_no_pseudo/oof.npy')
+        # weights = (np.abs(y_train - oof) < THRESHOLD)
+        # num_samples = len(weights)
+        # ignore_samples = num_samples - weights.sum()
+        # print(f'ignore {ignore_samples} samples out of {num_samples} samples')
+        # ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names, weight=weights.astype(np.float32))
 
-        # ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names)
+        ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names)
         gc.collect()
 
     with timer("lgb.cv"):
@@ -122,7 +126,7 @@ def train_cv(
                      folds=split,
                      return_cvbooster=True,
                      callbacks=[
-                        #  lgb.early_stopping(stopping_rounds=100, verbose=True),
+                         #  lgb.early_stopping(stopping_rounds=100, verbose=True),
                          lgb.log_evaluation(25),
                          #  wandb_callback()
                      ])
@@ -314,7 +318,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp044_ignore_hard_examples_for_043',
+        EXP_NAME='exp045_exp043_camaro094_095',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,

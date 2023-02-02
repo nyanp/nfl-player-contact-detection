@@ -26,12 +26,12 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred']
     df = df.merge(camaro_df[merge_cols], how='left')
 
-    # if camaro_df2 is None:
-    #     camaro_df2 = pd.read_csv('../pipeline/exp090_exp091_val_preds.csv')
-    # camaro_df2 = camaro_df2.rename(columns={'preds': 'camaro_pred2'})
-    # camaro_df2['camaro_pred2'] = camaro_df2['camaro_pred2'].astype(np.float32)
-    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred2']
-    # df = df.merge(camaro_df2[merge_cols], how='left')
+    if camaro_df2 is None:
+        camaro_df2 = pd.read_csv('../pipeline/exp094_exp095_val_preds.csv')
+    camaro_df2 = camaro_df2.rename(columns={'preds': 'camaro_pred2'})
+    camaro_df2['camaro_pred2'] = camaro_df2['camaro_pred2'].astype(np.float32)
+    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred2']
+    df = df.merge(camaro_df2[merge_cols], how='left')
 
     # if camaro_df is None:
     #     camaro_df = pd.read_csv('../pipeline/output/exp064_exp048_fiix_coords_scale/oof_val_preds_agg_df.csv')
@@ -156,7 +156,7 @@ def add_cnn_agg_features(df):
             'cnn_pred_Sideline_roll11',
             'cnn_pred_Endzone_roll11',
             'camaro_pred_roll11',
-            # 'camaro_pred2_roll11'
+            'camaro_pred2_roll11'
         ])
     df = g_con_around_feature(
         df,
@@ -165,7 +165,7 @@ def add_cnn_agg_features(df):
             'cnn_pred_Sideline_roll5',
             'cnn_pred_Endzone_roll5',
             'camaro_pred_roll5',
-            # 'camaro_pred2_roll5'
+            'camaro_pred2_roll5'
         ])
     df = p_con_shift_feature(
         df,
@@ -174,7 +174,7 @@ def add_cnn_agg_features(df):
             'cnn_pred_Sideline_roll5',
             'cnn_pred_Endzone_roll5',
             'camaro_pred_roll5',
-            # 'camaro_pred2_roll5'
+            'camaro_pred2_roll5'
         ])
     df = p_con_shift_feature(
         df,
@@ -183,7 +183,7 @@ def add_cnn_agg_features(df):
             'cnn_pred_Sideline_roll5',
             'cnn_pred_Endzone_roll5',
             'camaro_pred_roll5',
-            # 'camaro_pred2_roll5'
+            'camaro_pred2_roll5'
         ])
     # df = g_conact_as_condition(df, score_columns = ['cnn_pred_Sideline_roll11', 'cnn_pred_Endzone_roll11'])
 
