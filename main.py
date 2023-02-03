@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import wandb
 from feature_engineering.merge import make_features
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, matthews_corrcoef
 from sklearn.model_selection import PredefinedSplit
 from feature_engineering.point_set_matching import match_p2p_with_cache
 from utils.debugger import set_debugger
@@ -100,24 +100,24 @@ def train_cv(
         print(f"category: {list(encoder.encoders.keys())}")
 
         # pseudo labeling from exp041, turned off #########################################
-        # pseudo_y_train = np.load('output/exp041_exp040_camaro2/oof.npy')
-        # serializer = LGBMSerializer.from_file("lgb", 'output/exp041_exp040_camaro2')
-        # threshold_1 = serializer.threshold_1
-        # threshold_2 = serializer.threshold_2
-        # pseudo_y_pred = binarize_pred(pseudo_y_train, threshold_1, threshold_2, is_ground)
-        # ds_train = lgb.Dataset(X_train, pseudo_y_pred, feature_name=feature_names)
+        pseudo_y_train = np.load('output/exp046_holdout_fold3_only_camaro_cnn/oof.npy')
+        serializer = LGBMSerializer.from_file("lgb", 'output/exp046_holdout_fold3_only_camaro_cnn')
+        threshold_1 = serializer.threshold_1
+        threshold_2 = serializer.threshold_2
+        pseudo_y_pred = binarize_pred(pseudo_y_train, threshold_1, threshold_2, is_ground)
+        ds_train = lgb.Dataset(X_train, pseudo_y_pred, feature_name=feature_names)
         ###################################################################################
 
-        # # ignore strange examples by exp043 oof
+        # ignore strange examples by exp046 oof
         # THRESHOLD = 0.99
-        # oof = np.load('output/exp043_no_pseudo/oof.npy')
+        # oof = np.load('output/exp046_holdout_fold3_only_camaro_cnn/oof.npy')
         # weights = (np.abs(y_train - oof) < THRESHOLD)
         # num_samples = len(weights)
         # ignore_samples = num_samples - weights.sum()
         # print(f'ignore {ignore_samples} samples out of {num_samples} samples')
         # ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names, weight=weights.astype(np.float32))
 
-        ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names)
+        # ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names)
         gc.collect()
 
     with timer("lgb.cv"):
@@ -225,6 +225,14 @@ def train(cfg: Config):
     if cfg.DEBUG:
         print('sample small subset for debug.')
         train_df = train_df.sample(10000)
+
+    # hold out fold 3
+    split_df = train_df[["game_play"]].copy()
+    split_df["game"] = split_df["game_play"].str[:5].astype(int)
+    split_df = pd.merge(split_df, split_defs, how="left")
+    train_df = train_df.loc[split_df['fold'] != 3].reset_index(drop=True)
+    print('hold out fold 3.', train_df.shape)
+
     train_feature_df, train_selected_index = make_features(train_df, tr_tracking, tr_regist)
     gc.collect()
 
@@ -239,6 +247,86 @@ def train(cfg: Config):
 
     serializer = LGBMSerializer(cvbooster, encoder, threshold_1, threshold_2)
     serializer.to_file("lgb", save_dir)
+
+
+def holdout_validate(cfg: Config):
+    save_dir = cfg.PRETRAINED_MODEL_PATH or f'output/{cfg.EXP_NAME}'
+    serializer = LGBMSerializer.from_file("lgb", save_dir)
+    cvbooster = serializer.booster
+    encoder = serializer.encoders
+    threshold_1 = serializer.threshold_1
+    threshold_2 = serializer.threshold_2
+
+    with timer("load file"):
+        tr_tracking = read_csv_with_cache("train_player_tracking.csv", cfg.INPUT, cfg.CACHE, usecols=TRACK_COLS)
+        train_df = read_csv_with_cache("train_labels.csv", cfg.INPUT, cfg.CACHE, usecols=TRAIN_COLS)
+        split_defs = pd.read_csv(cfg.SPLIT_FILE_PATH)
+        tr_helmets = read_csv_with_cache("train_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
+        tr_meta = pd.read_csv(os.path.join(cfg.INPUT, "train_video_metadata.csv"),
+                              parse_dates=["start_time", "end_time", "snap_time"])
+        tr_regist = match_p2p_with_cache(os.path.join(cfg.CACHE, "train_registration.f"), tracking=tr_tracking, helmets=tr_helmets, meta=tr_meta)
+
+    with timer("assign helmet metadata"):
+        train_df = expand_helmet(cfg, train_df, "train")
+        gc.collect()
+
+    if cfg.DEBUG:
+        print('sample small subset for debug.')
+        train_df = train_df.sample(10000)
+
+    # hold out fold 3
+    split_df = train_df[["game_play"]].copy()
+    split_df["game"] = split_df["game_play"].str[:5].astype(int)
+    split_df = pd.merge(split_df, split_defs, how="left")
+    test_df = train_df.loc[split_df['fold'] == 3].reset_index(drop=True)
+    print('hold out fold 3.', test_df.shape)
+
+    test_tracking = tr_tracking
+    test_regist = tr_regist
+
+    df_args = [None, None, None, pd.read_csv('../pipeline/exp096_holdout3_preds.csv')]
+
+    feature_cols = cvbooster.feature_name()[0]
+
+    def _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args):
+        with timer("make features(test)"):
+            game_test_feature_df, test_selected_index = make_features(
+                game_test_df, game_test_tracking, game_test_regist, df_args, cfg.ENABLE_MULTIPROCESS)
+
+        X_test = encoder.transform(game_test_feature_df[feature_cols])
+        predicted = cvbooster.predict(X_test)
+
+        del X_test
+        gc.collect()
+
+        avg_predicted = np.array(predicted).mean(axis=0)
+
+        is_ground = game_test_feature_df["nfl_player_id_2"] == -1
+        pred_binalized = binarize_pred(
+            avg_predicted, threshold_1, threshold_2, is_ground)
+
+        game_test_df = add_contact_id(game_test_df)
+        game_test_df['contact'] = 0
+        game_test_df.loc[test_selected_index, 'contact'] = pred_binalized.astype(int).values
+        # game_test_df[['contact_id', 'contact']].to_csv('submission.csv', index=False)
+        return game_test_df
+
+    game_test_dfs = []
+    game_plays = test_df['game_play'].unique()
+    game_test_gb = test_df.groupby(['game_play'])
+    game_test_tracking_gb = test_tracking.groupby(['game_play'])
+    game_test_regist_gb = test_regist.groupby(['game_play'])
+    for game_play in game_plays:
+        game_test_df = game_test_gb.get_group(game_play)
+        game_test_tracking = game_test_tracking_gb.get_group(game_play)
+        game_test_regist = game_test_regist_gb.get_group(game_play)
+        game_test_df = _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args)
+        game_test_dfs.append(game_test_df)
+        gc.collect()
+    sub = pd.concat(game_test_dfs).reset_index(drop=True)
+    sub[['contact_id', 'contact']].to_csv(f'{save_dir}/holdout_preds.csv', index=False)
+    mcc = matthews_corrcoef(test_df.contact, sub.contact)
+    print(f'hold out set score = {mcc}')
 
 
 def inference(cfg: Config):
@@ -268,13 +356,21 @@ def inference(cfg: Config):
         df_args = []
         if cfg.CAMARO_DF_PATH:
             df_args.append(pd.read_csv(cfg.CAMARO_DF_PATH))
+        else:
+            df_args.append(None)
         if cfg.KMAT_END_DF_PATH:
             df_args.append(pd.read_csv(cfg.KMAT_END_DF_PATH))
+        else:
+            df_args.append(None)
         if cfg.KMAT_SIDE_DF_PATH:
             df_args.append(pd.read_csv(cfg.KMAT_SIDE_DF_PATH))
+        else:
+            df_args.append(None)
         if cfg.CAMARO_DF2_PATH:
             df_args.append(pd.read_csv(cfg.CAMARO_DF2_PATH))
-
+        else:
+            df_args.append(None)
+            
     feature_cols = cvbooster.feature_name()[0]
 
     def _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args):
@@ -318,7 +414,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp045_exp043_camaro094_095',
+        EXP_NAME='exp046_holdout_fold3_only_camaro_cnn',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,
@@ -331,6 +427,9 @@ def main(args):
         set_debugger()
         cfg.MODEL_SIZE = ModelSize.SMALL
 
+    if args.validate_only:
+        holdout_validate(cfg)
+        return
     if not args.inference_only:
         train(cfg)
     inference(cfg)
@@ -340,6 +439,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", "-db", action="store_true")
     parser.add_argument("--inference_only", "-i", action="store_true")
+    parser.add_argument("--validate_only", "-v", action="store_true")
     parser.add_argument("--lgbm_path", "-l", default="", type=str)
     parser.add_argument("--camaro_path", "-c", default="", type=str)
     parser.add_argument("--camaro2_path", "-c2", default="", type=str)
