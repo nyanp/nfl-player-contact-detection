@@ -163,4 +163,4 @@ debug.en
 *.npy
 *.png
 
-!visualize.ipynb
+visualize.ipynb

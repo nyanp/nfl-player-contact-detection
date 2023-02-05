@@ -28,6 +28,58 @@ from utils.nfl import (
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
+IGNORE_PAIRS = [
+    ('58577_002486', 45573, 47863),  # strange
+    ('58311_002159', 43475, 44892),  # strange
+    ('58577_002486', 45033, 45573),  # strange
+    # ('58403_001076', 45005, 52410), # missing
+    # ('58279_002309', 41947, 46238), # missing
+    # ('58384_000142', 45203, 48099), # missing
+    ('58270_002527', 43362, 52435),  # strange
+    # ('58247_003522', 45305, 52462), # miss
+    # ('58399_000570', 37077, 46778), # miss
+    # ('58180_000986', 46113, 46657), # miss
+    # ('58406_000188', 46243, 47802), # lost
+    # ('58551_003569', 53462, 53475), # lost
+    ('58301_002369', 42883, 46204),  # strange
+    # ('58415_003155', 43700, 48988), miss
+    # ('58220_002149', 41292, 52459), miss
+    # ('58537_000757', 46184, 53640), # lost
+    # ('58245_002594', 43361, 47871), # lost
+    ('58180_000986', 43697, 46164),  # ambiguous,
+    # ('58551_003569', 42375, 53475), # lost
+    # ('58240_000086', 42392, 47857), # lost
+    # ('58247_003522', 46085, 52462), # lost
+    ('58525_003852', 43534, 53079),  # strange
+    # ('58204_002864', 42388, 43334), # lost
+    ('58187_002329', 41947, 43426),  # strange
+    ('58202_002335', 43399, 46165),  # strange
+    ('58401_001720', 43341, 43454),  # strange
+    ('58555_002563', 45532, 46527),  # strange
+    # ('58552_002943', 39998, 46082), # lost
+    ('58537_000757', 43474, 53640),  # strange?
+    # ('58308_004092', 41275, 44927), # lost
+    # ('58516_003538', 47800, 53464), # miss
+    # ('58407_001855', 43319, 52499), # lost
+    ('58224_002486', 42404, 46188),  # strange
+    ('58188_001757', 42830, 52449),  # strange
+    ('58216_001891', 42358, 44892),  # strange
+    ('58266_000095', 42390, 45003),  # strange
+    ('58422_001959', 43648, 46203),  # strange
+    ('58291_001043', 39957, 48220),  # strange
+    ('58546_003306', 42924, 43436),  # strange
+    ('58527_000757', 38542, 42830),  # strange
+    # ('58308_004092', 37104, 44927), # lost
+    # ('58302_004013', 46618, 52619), # miss
+    # ('58187_002329', 40116, 41947), # lost
+    # ('58281_000692', 40011, 42771), # miss
+    # ('58403_001076', 44876, 46082), # miss
+    # ('58550_001554', 43293, 44826), # miss
+    # ('58227_000943', 46191, 47844), # lost
+    ('58330_000759', 43484, 45012),  # ambiguous
+    ('58174_001792', 44827, 52450),  # strange
+]
+
 
 def get_lgb_params(cfg):
     lgb_params = {
@@ -57,6 +109,47 @@ def get_lgb_params(cfg):
     else:
         raise NotImplementedError()
     return lgb_params
+
+
+def get_pseudo_ds_train(X_train, y_train, is_ground, feature_names):
+    # pseudo labeling from exp046
+    pseudo_y_train = np.load('output/exp046_holdout_fold3_only_camaro_cnn/oof.npy')
+    serializer = LGBMSerializer.from_file("lgb", 'output/exp046_holdout_fold3_only_camaro_cnn')
+    threshold_1 = serializer.threshold_1
+    threshold_2 = serializer.threshold_2
+    pseudo_y_pred = binarize_pred(pseudo_y_train, threshold_1, threshold_2, is_ground)
+    ds_train = lgb.Dataset(X_train, pseudo_y_pred, feature_name=feature_names)
+    return ds_train
+
+
+def get_ignore_strange_ds_train(X_train, y_train, is_ground, feature_names):
+    # ignore strange examples by exp046 oof
+    THRESHOLD = 0.99
+    oof = np.load('output/exp046_holdout_fold3_only_camaro_cnn/oof.npy')
+    weights = (np.abs(y_train - oof) < THRESHOLD)
+    num_samples = len(weights)
+    ignore_samples = num_samples - weights.sum()
+    print(f'ignore {ignore_samples} samples out of {num_samples} samples')
+    ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names, weight=weights.astype(np.float32))
+    return ds_train
+
+
+def get_manuall_ignore_strange_ds_train(X_train, y_train, is_ground, feature_names, train_df):
+    # ignore strange labels manually
+    weights = []
+    for key, df in train_df.groupby(['game_play', 'nfl_player_id_1', 'nfl_player_id_2']):
+        if key in IGNORE_PAIRS:
+            weights.append(np.zeros(len(df)))
+        else:
+            weights.append(np.ones(len(df)))
+    weights = np.concatenate(weights)
+    print(f'ignore {(weights==0).sum()} samples out of {len(weights)} samples')
+    ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names, weight=weights.astype(np.float32))
+    return ds_train
+
+
+def get_normal_ds_train(X_train, y_train, is_ground, feature_names):
+    return lgb.Dataset(X_train, y_train, feature_name=feature_names)
 
 
 def train_cv(
@@ -99,30 +192,16 @@ def train_cv(
         # print(f"features: {feature_names}")
         print(f"category: {list(encoder.encoders.keys())}")
 
-        # pseudo labeling from exp041, turned off #########################################
-        pseudo_y_train = np.load('output/exp046_holdout_fold3_only_camaro_cnn/oof.npy')
-        serializer = LGBMSerializer.from_file("lgb", 'output/exp046_holdout_fold3_only_camaro_cnn')
-        threshold_1 = serializer.threshold_1
-        threshold_2 = serializer.threshold_2
-        pseudo_y_pred = binarize_pred(pseudo_y_train, threshold_1, threshold_2, is_ground)
-        ds_train = lgb.Dataset(X_train, pseudo_y_pred, feature_name=feature_names)
-        ###################################################################################
+        # ds_train = get_pseudo_ds_train(X_train, y_train, is_ground, feature_names)
+        # ds_train = get_ignore_strange_ds_train(X_train, y_train, is_ground, feature_names)
+        # ds_train = get_manuall_ignore_strange_ds_train(X_train, y_train, is_ground, feature_names, train_df)
+        ds_train = get_normal_ds_train(X_train, y_train, is_ground, feature_names)
 
-        # ignore strange examples by exp046 oof
-        # THRESHOLD = 0.99
-        # oof = np.load('output/exp046_holdout_fold3_only_camaro_cnn/oof.npy')
-        # weights = (np.abs(y_train - oof) < THRESHOLD)
-        # num_samples = len(weights)
-        # ignore_samples = num_samples - weights.sum()
-        # print(f'ignore {ignore_samples} samples out of {num_samples} samples')
-        # ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names, weight=weights.astype(np.float32))
-
-        # ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names)
         gc.collect()
 
     with timer("lgb.cv"):
         ret = lgb.cv(lgb_params, ds_train,
-                     num_boost_round=4000,
+                     num_boost_round=2000,
                      folds=split,
                      return_cvbooster=True,
                      callbacks=[
@@ -181,12 +260,15 @@ def train_cv(
             per_play_mcc_df = summarize_per_play_mcc(original_df)
             per_play_mcc_df.to_csv('per_play_mcc_df.csv', index=False)
 
+            holdout_mcc = holdout_validate(cfg, ret["cvbooster"], encoder, threshold_1, threshold_2)
+
             wandb.log(dict(
                 threshold_1=threshold_1,
                 threshold_2=threshold_2,
                 mcc=mcc,
                 mcc_ground=mcc_ground,
                 mcc_non_ground=mcc_non_ground,
+                holdout_mcc=holdout_mcc,
                 auc=auc,
                 per_play_mcc=wandb.Table(dataframe=per_play_mcc_df)
             ))
@@ -249,14 +331,7 @@ def train(cfg: Config):
     serializer.to_file("lgb", save_dir)
 
 
-def holdout_validate(cfg: Config):
-    save_dir = cfg.PRETRAINED_MODEL_PATH or f'output/{cfg.EXP_NAME}'
-    serializer = LGBMSerializer.from_file("lgb", save_dir)
-    cvbooster = serializer.booster
-    encoder = serializer.encoders
-    threshold_1 = serializer.threshold_1
-    threshold_2 = serializer.threshold_2
-
+def holdout_validate(cfg: Config, cvbooster, encoder, threshold_1, threshold_2):
     with timer("load file"):
         tr_tracking = read_csv_with_cache("train_player_tracking.csv", cfg.INPUT, cfg.CACHE, usecols=TRACK_COLS)
         train_df = read_csv_with_cache("train_labels.csv", cfg.INPUT, cfg.CACHE, usecols=TRAIN_COLS)
@@ -308,7 +383,6 @@ def holdout_validate(cfg: Config):
         game_test_df = add_contact_id(game_test_df)
         game_test_df['contact'] = 0
         game_test_df.loc[test_selected_index, 'contact'] = pred_binalized.astype(int).values
-        # game_test_df[['contact_id', 'contact']].to_csv('submission.csv', index=False)
         return game_test_df
 
     game_test_dfs = []
@@ -324,9 +398,12 @@ def holdout_validate(cfg: Config):
         game_test_dfs.append(game_test_df)
         gc.collect()
     sub = pd.concat(game_test_dfs).reset_index(drop=True)
+
+    save_dir = cfg.PRETRAINED_MODEL_PATH or f'output/{cfg.EXP_NAME}'
     sub[['contact_id', 'contact']].to_csv(f'{save_dir}/holdout_preds.csv', index=False)
     mcc = matthews_corrcoef(test_df.contact, sub.contact)
     print(f'hold out set score = {mcc}')
+    return mcc
 
 
 def inference(cfg: Config):
@@ -370,7 +447,7 @@ def inference(cfg: Config):
             df_args.append(pd.read_csv(cfg.CAMARO_DF2_PATH))
         else:
             df_args.append(None)
-            
+
     feature_cols = cvbooster.feature_name()[0]
 
     def _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args):
@@ -414,7 +491,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp046_holdout_fold3_only_camaro_cnn',
+        EXP_NAME='exp052_exp049_close2_iter2000_ignore_strange',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,
@@ -428,7 +505,13 @@ def main(args):
         cfg.MODEL_SIZE = ModelSize.SMALL
 
     if args.validate_only:
-        holdout_validate(cfg)
+        save_dir = cfg.PRETRAINED_MODEL_PATH or f'output/{cfg.EXP_NAME}'
+        serializer = LGBMSerializer.from_file("lgb", save_dir)
+        cvbooster = serializer.booster
+        encoder = serializer.encoders
+        threshold_1 = serializer.threshold_1
+        threshold_2 = serializer.threshold_2
+        holdout_validate(cfg, cvbooster, encoder, threshold_1, threshold_2)
         return
     if not args.inference_only:
         train(cfg)
