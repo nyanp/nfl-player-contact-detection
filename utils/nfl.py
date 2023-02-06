@@ -24,7 +24,7 @@ TRACK_COLS = [
     "direction",
     "orientation",
     "acceleration",
-    "sa"
+    # "sa"
 ]
 TRAIN_COLS = [
     "game_play",

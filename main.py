@@ -306,7 +306,7 @@ def train(cfg: Config):
 
     if cfg.DEBUG:
         print('sample small subset for debug.')
-        train_df = train_df.sample(10000)
+        train_df = train_df.sample(10000).reset_index(drop=True)
 
     # hold out fold 3
     split_df = train_df[["game_play"]].copy()
@@ -366,7 +366,7 @@ def holdout_validate(cfg: Config, cvbooster, encoder, threshold_1, threshold_2):
     def _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args):
         with timer("make features(test)"):
             game_test_feature_df, test_selected_index = make_features(
-                game_test_df, game_test_tracking, game_test_regist, df_args, cfg.ENABLE_MULTIPROCESS)
+                game_test_df, game_test_tracking, game_test_regist, df_args, enable_multiprocess=False)
 
         X_test = encoder.transform(game_test_feature_df[feature_cols])
         predicted = cvbooster.predict(X_test)
@@ -491,7 +491,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp052_exp049_close2_iter2000_ignore_strange',
+        EXP_NAME='exp054_exp049_reduce_feats_v1',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,

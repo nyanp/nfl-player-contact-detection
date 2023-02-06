@@ -167,18 +167,18 @@ def add_tracking_agg_features(df, tracking):
         y_position_team_mean=pd.NamedAgg("y_position", "mean"),
         speed_team_mean=pd.NamedAgg("speed", "mean"),
         acceleration_team_mean=pd.NamedAgg("acceleration", "mean"),
-        sa_team_mean=pd.NamedAgg("sa", "mean")
+        # sa_team_mean=pd.NamedAgg("sa", "mean")
     )
     agg = tracking.groupby(["game_play", "step"]).agg(
         x_position_mean=pd.NamedAgg("x_position", "mean"),
         y_position_mean=pd.NamedAgg("y_position", "mean"),
         speed_mean=pd.NamedAgg("speed", "mean"),
         acceleration_mean=pd.NamedAgg("acceleration", "mean"),
-        sa_mean=pd.NamedAgg("sa", "mean")
+        # sa_mean=pd.NamedAgg("sa", "mean")
     )
     player_agg = tracking[tracking["step"] >= 0].groupby(["game_play", "nfl_player_id"]).agg(
-        sa_player_mean=pd.NamedAgg("sa", "mean"),
-        sa_player_max=pd.NamedAgg("sa", "max"),
+        # sa_player_mean=pd.NamedAgg("sa", "mean"),
+        # sa_player_max=pd.NamedAgg("sa", "max"),
         acceleration_player_mean=pd.NamedAgg("acceleration", "mean"),
         acceleration_player_max=pd.NamedAgg("acceleration", "max"),
         speed_player_mean=pd.NamedAgg("speed", "mean"),
@@ -430,7 +430,8 @@ def add_shift_of_player(df, tracking, shifts, add_diff=False, player_id="1"):
         "direction",
         "acceleration",
         "distance",
-        "sa"]
+        # "sa"
+        ]
 
     for shift in shifts:
         tracking["step"] = step_orig - shift
@@ -467,7 +468,7 @@ def tracking_prep(tracking):
         "direction",
         "orientation",
         "acceleration",
-        "sa",
+        # "sa",
         "speed",
             "distance"]:
         tracking[f"{c}_p1"] = tracking.groupby(

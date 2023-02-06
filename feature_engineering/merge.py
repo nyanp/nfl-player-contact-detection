@@ -22,7 +22,7 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
             [
                 "team", "position", "x_position", "y_position",
                 "speed", "distance", "direction", "orientation", "acceleration",
-                "sa",
+                # "sa",
                 # "direction_p1_diff", "direction_m1_diff",
                 # "orientation_p1_diff", "orientation_m1_diff",
                 # "distance_p1", "distance_m1"
@@ -81,18 +81,18 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
             # 'cnn_pred_Sideline',
             # 'cnn_pred_Endzone',
         ])
-        feature_df = agg_cnn_feature(feature_df, columns=[
-            # 'camaro_pred',
-            'camaro_pred2',
-            # 'cnn_pred_Sideline',
-            # 'cnn_pred_Endzone',
-        ])
+        # feature_df = agg_cnn_feature(feature_df, columns=[
+        #     # 'camaro_pred',
+        #     'camaro_pred2',
+        #     # 'cnn_pred_Sideline',
+        #     # 'cnn_pred_Endzone',
+        # ])
         feature_df, close_sample_index = select_close_example(feature_df)
 
         feature_df = add_bbox_features(feature_df)
         feature_df = add_step_feature(feature_df, tracking)
         feature_df = add_tracking_agg_features(feature_df, tracking)
-        feature_df = add_t0_feature(feature_df, tracking)
+        # feature_df = add_t0_feature(feature_df, tracking)
         feature_df = add_distance_around_player(feature_df)
         feature_df = add_aspect_ratio_feature(feature_df, False)
         feature_df = add_misc_features_after_agg(feature_df)
