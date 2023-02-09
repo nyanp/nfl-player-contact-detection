@@ -201,7 +201,7 @@ def train_cv(
 
     with timer("lgb.cv"):
         ret = lgb.cv(lgb_params, ds_train,
-                     num_boost_round=2000,
+                     num_boost_round=4000,
                      folds=split,
                      return_cvbooster=True,
                      callbacks=[
@@ -260,7 +260,7 @@ def train_cv(
             per_play_mcc_df = summarize_per_play_mcc(original_df)
             per_play_mcc_df.to_csv('per_play_mcc_df.csv', index=False)
 
-            holdout_mcc = holdout_validate(cfg, ret["cvbooster"], encoder, threshold_1, threshold_2)
+            # holdout_mcc = holdout_validate(cfg, ret["cvbooster"], encoder, threshold_1, threshold_2)
 
             wandb.log(dict(
                 threshold_1=threshold_1,
@@ -268,7 +268,7 @@ def train_cv(
                 mcc=mcc,
                 mcc_ground=mcc_ground,
                 mcc_non_ground=mcc_non_ground,
-                holdout_mcc=holdout_mcc,
+                # holdout_mcc=holdout_mcc,
                 auc=auc,
                 per_play_mcc=wandb.Table(dataframe=per_play_mcc_df)
             ))
@@ -308,12 +308,12 @@ def train(cfg: Config):
         print('sample small subset for debug.')
         train_df = train_df.sample(10000).reset_index(drop=True)
 
-    # hold out fold 3
-    split_df = train_df[["game_play"]].copy()
-    split_df["game"] = split_df["game_play"].str[:5].astype(int)
-    split_df = pd.merge(split_df, split_defs, how="left")
-    train_df = train_df.loc[split_df['fold'] != 3].reset_index(drop=True)
-    print('hold out fold 3.', train_df.shape)
+    # # hold out fold 3
+    # split_df = train_df[["game_play"]].copy()
+    # split_df["game"] = split_df["game_play"].str[:5].astype(int)
+    # split_df = pd.merge(split_df, split_defs, how="left")
+    # train_df = train_df.loc[split_df['fold'] != 3].reset_index(drop=True)
+    # print('hold out fold 3.', train_df.shape)
 
     train_feature_df, train_selected_index = make_features(train_df, tr_tracking, tr_regist)
     gc.collect()
@@ -491,7 +491,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp054_exp049_reduce_feats_v1',
+        EXP_NAME='exp056_exp055_remove_feats',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,

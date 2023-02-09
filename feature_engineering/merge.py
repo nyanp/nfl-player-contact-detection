@@ -41,10 +41,10 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
             feature_df,
             window_size=5,
             columns_to_roll=[
-                # 'camaro_pred',
-                'camaro_pred2',
-                # 'cnn_pred_Sideline',
-                # 'cnn_pred_Endzone',
+                'camaro_pred',
+                # 'camaro_pred2',
+                'cnn_pred_Sideline',
+                'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'],
             enable_multiprocess=enable_multiprocess)
@@ -53,10 +53,10 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
             feature_df,
             window_size=11,
             columns_to_roll=[
-                # 'camaro_pred',
-                'camaro_pred2',
-                # 'cnn_pred_Sideline',
-                # 'cnn_pred_Endzone',
+                'camaro_pred',
+                # 'camaro_pred2',
+                'cnn_pred_Sideline',
+                'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'],
             enable_multiprocess=enable_multiprocess)
@@ -65,28 +65,28 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
             feature_df,
             window_size=21,
             columns_to_roll=[
-                # 'camaro_pred',
-                'camaro_pred2',
-                # 'cnn_pred_Sideline',
-                # 'cnn_pred_Endzone',
+                'camaro_pred',
+                # 'camaro_pred2',
+                'cnn_pred_Sideline',
+                'cnn_pred_Endzone',
                 'x_rel_position_offset_on_img_End',
                 'y_rel_position_offset_on_img_Side'],
             enable_multiprocess=enable_multiprocess)
 
-        feature_df = add_cnn_agg_features(feature_df)
+        # feature_df = add_cnn_agg_features(feature_df)
 
         feature_df = add_cnn_shift_diff_features(feature_df, columns=[
-            # 'camaro_pred',
-            'camaro_pred2',
-            # 'cnn_pred_Sideline',
-            # 'cnn_pred_Endzone',
+            'camaro_pred',
+            # 'camaro_pred2',
+            'cnn_pred_Sideline',
+            'cnn_pred_Endzone',
         ])
-        # feature_df = agg_cnn_feature(feature_df, columns=[
-        #     # 'camaro_pred',
-        #     'camaro_pred2',
-        #     # 'cnn_pred_Sideline',
-        #     # 'cnn_pred_Endzone',
-        # ])
+        feature_df = agg_cnn_feature(feature_df, columns=[
+            'camaro_pred',
+            # 'camaro_pred2',
+            'cnn_pred_Sideline',
+            'cnn_pred_Endzone',
+        ])
         feature_df, close_sample_index = select_close_example(feature_df)
 
         feature_df = add_bbox_features(feature_df)
@@ -100,8 +100,8 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
         feature_df = add_shift_of_player(feature_df, tracking, [-5, 5], add_diff=True, player_id="2")
         feature_df = add_bbox_std_overlap_feature(feature_df)
         feature_df = add_interceptor_feature(feature_df)
-        # feature_df = add_image_coords_features(feature_df)
-        # feature_df = add_bbox_std_features(feature_df)
+        feature_df = add_image_coords_features(feature_df)
+        feature_df = add_bbox_std_features(feature_df)
     print(feature_df.shape)
     # print(feature_df.columns.tolist())
     return feature_df, close_sample_index
