@@ -116,10 +116,10 @@ class LGBMSerializer:
             model["threshold_2"])
 
 
-def make_oof(cvbooster, X_train: np.ndarray, y_train: pd.Series, split):
+def make_oof(boosters, X_train: np.ndarray, y_train: pd.Series, split):
     oof = np.zeros(len(X_train))
 
-    for booster, (idx_train, idx_valid) in zip(cvbooster.boosters, split):
+    for booster, (idx_train, idx_valid) in zip(boosters, split):
         y_pred = booster.predict(X_train[idx_valid])
         oof[idx_valid] = y_pred
         print(f"{roc_auc_score(y_train.iloc[idx_valid].values, y_pred)}")

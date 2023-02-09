@@ -200,6 +200,7 @@ def train_cv(
         gc.collect()
 
     with timer("lgb.cv"):
+        split.append((np.arange(len(train_df)), np.arange(10)))
         ret = lgb.cv(lgb_params, ds_train,
                      num_boost_round=4000,
                      folds=split,
@@ -219,7 +220,7 @@ def train_cv(
     plot_importance(ret["cvbooster"])
 
     if calc_oof:
-        oof = make_oof(ret["cvbooster"], X_train, y_train, split)
+        oof = make_oof(ret["cvbooster"].boosters[:-1], X_train, y_train, split)
 
         save_dir = f'output/{cfg.EXP_NAME}'
         np.save(f"{save_dir}/X_train.npy", X_train)
@@ -491,7 +492,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp057_exp043_nyanp_update',
+        EXP_NAME='exp059_exp057_oof+all',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,

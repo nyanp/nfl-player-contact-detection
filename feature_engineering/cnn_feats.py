@@ -27,7 +27,7 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
     df = df.merge(camaro_df[merge_cols], how='left')
 
     # if camaro_df2 is None:
-    #     camaro_df2 = pd.read_csv('../pipeline/eexp096_exp064_holdout3_val_preds.csv')
+    #     camaro_df2 = pd.read_csv('../pipeline/exp099_exp100_val_preds.csv')
     # camaro_df2 = camaro_df2.rename(columns={'preds': 'camaro_pred2'})
     # camaro_df2['camaro_pred2'] = camaro_df2['camaro_pred2'].astype(np.float32)
     # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred2']
@@ -149,42 +149,32 @@ def add_cnn_agg_features(df):
 
         return df_train
 
+    base_feature_cols = [
+        'cnn_pred_Sideline',
+        'cnn_pred_Endzone',
+        'camaro_pred',
+        # 'camaro_pred2'
+    ]
     df = g_con_around_feature(
         df,
         dist_thresh=1.5,
-        columns=[
-            'cnn_pred_Sideline_roll11',
-            'cnn_pred_Endzone_roll11',
-            'camaro_pred_roll11',
-            # 'camaro_pred2_roll11'
-        ])
+        columns=[f'{col}_roll11' for col in base_feature_cols],
+        )
     df = g_con_around_feature(
         df,
         dist_thresh=0.75,
-        columns=[
-            'cnn_pred_Sideline_roll5',
-            'cnn_pred_Endzone_roll5',
-            'camaro_pred_roll5',
-            # 'camaro_pred2_roll5'
-        ])
+        columns=[f'{col}_roll5' for col in base_feature_cols],
+        )
     df = p_con_shift_feature(
         df,
         step_offset=5,
-        score_columns=[
-            'cnn_pred_Sideline_roll5',
-            'cnn_pred_Endzone_roll5',
-            'camaro_pred_roll5',
-            # 'camaro_pred2_roll5'
-        ])
+        score_columns=[f'{col}_roll5' for col in base_feature_cols],
+        )
     df = p_con_shift_feature(
         df,
         step_offset=-5,
-        score_columns=[
-            'cnn_pred_Sideline_roll5',
-            'cnn_pred_Endzone_roll5',
-            'camaro_pred_roll5',
-            # 'camaro_pred2_roll5'
-        ])
+        score_columns=[f'{col}_roll5' for col in base_feature_cols]
+        )
     # df = g_conact_as_condition(df, score_columns = ['cnn_pred_Sideline_roll11', 'cnn_pred_Endzone_roll11'])
 
     return reduce_dtype(df)

@@ -41,56 +41,38 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
         feature_df = add_cnn_features(feature_df, *df_args)
         feature_df = add_p2p_matching_features(feature_df, regist)
 
+        base_feature_cols = [
+            'cnn_pred_Sideline',
+            'cnn_pred_Endzone',
+            'camaro_pred',
+            # 'camaro_pred2',
+        ]
+        offset_cols = [
+            'x_rel_position_offset_on_img_End',
+            'y_rel_position_offset_on_img_Side'
+        ]
         feature_df = interpolate_features(
             feature_df,
             window_size=5,
-            columns_to_roll=[
-                'camaro_pred',
-                # 'camaro_pred2',
-                'cnn_pred_Sideline',
-                'cnn_pred_Endzone',
-                'x_rel_position_offset_on_img_End',
-                'y_rel_position_offset_on_img_Side'],
+            columns_to_roll=base_feature_cols + offset_cols,
             enable_multiprocess=enable_multiprocess)
 
         feature_df = interpolate_features(
             feature_df,
             window_size=11,
-            columns_to_roll=[
-                'camaro_pred',
-                # 'camaro_pred2',
-                'cnn_pred_Sideline',
-                'cnn_pred_Endzone',
-                'x_rel_position_offset_on_img_End',
-                'y_rel_position_offset_on_img_Side'],
+            columns_to_roll=base_feature_cols + offset_cols,
             enable_multiprocess=enable_multiprocess)
 
         feature_df = interpolate_features(
             feature_df,
             window_size=21,
-            columns_to_roll=[
-                'camaro_pred',
-                # 'camaro_pred2',
-                'cnn_pred_Sideline',
-                'cnn_pred_Endzone',
-                'x_rel_position_offset_on_img_End',
-                'y_rel_position_offset_on_img_Side'],
+            columns_to_roll=base_feature_cols + offset_cols,
             enable_multiprocess=enable_multiprocess)
 
         feature_df = add_cnn_agg_features(feature_df)
 
-        feature_df = add_cnn_shift_diff_features(feature_df, columns=[
-            'camaro_pred',
-            # 'camaro_pred2',
-            'cnn_pred_Sideline',
-            'cnn_pred_Endzone',
-        ])
-        feature_df = agg_cnn_feature(feature_df, columns=[
-            'camaro_pred',
-            # 'camaro_pred2',
-            'cnn_pred_Sideline',
-            'cnn_pred_Endzone',
-        ])
+        feature_df = add_cnn_shift_diff_features(feature_df, columns=base_feature_cols)
+        feature_df = agg_cnn_feature(feature_df, columns=base_feature_cols)
         feature_df, close_sample_index = select_close_example(feature_df)
 
         feature_df = add_bbox_features(feature_df)
