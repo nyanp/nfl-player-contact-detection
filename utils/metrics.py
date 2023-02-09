@@ -36,8 +36,8 @@ def search_best_threshold_pair(y_true, y_pred, is_ground):
 
 def search_best_threshold_pair_optuna(y_true, y_pred, is_ground, n_trials=100):
     def objective(trial):
-        th1 = trial.suggest_float('th1', 0.1, 0.6)
-        th2 = trial.suggest_float('th2', 0.1, 0.6)
+        th1 = trial.suggest_float('th1', 0.05, 0.6)
+        th2 = trial.suggest_float('th2', 0.05, 0.6)
         score = matthews_corrcoef(y_true, binarize_pred(y_pred, th1, th2, is_ground))
         return -score
     study = optuna.create_study()  # Create a new study.

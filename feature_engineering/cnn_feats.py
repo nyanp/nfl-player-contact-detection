@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import glob
 
+from utils.general import reduce_dtype
+
 
 def add_cnn_shift_diff_features(df: pd.DataFrame, shift_steps: List[int] = [-5, -3, -1, 1, 3, 5],
                                 columns: List[str] = ["cnn_pred_Sideline", "cnn_pred_Endzone"]) -> pd.DataFrame:
@@ -19,15 +21,17 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
     if camaro_df is None:
         camaro_df = pd.read_csv('../input/nfl-exp048/val_df.csv')
     camaro_df['camaro_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
+    camaro_df['camaro_pred'] = camaro_df['camaro_pred'].astype(np.float32)
     camaro_df.loc[camaro_df['masks'], 'camaro_pred'] = camaro_df.loc[camaro_df['masks'], 'preds']
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred']
     df = df.merge(camaro_df[merge_cols], how='left')
 
     # if camaro_df2 is None:
-    #     camaro_df2 = pd.read_csv('../pipeline/exp090_exp091_val_preds.csv')
-    #     camaro_df2 = camaro_df2.rename(columns={'preds': 'camaro_pred2'})
-    #     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred2']
-    #     df = df.merge(camaro_df2[merge_cols], how='left')
+    #     camaro_df2 = pd.read_csv('../pipeline/eexp096_exp064_holdout3_val_preds.csv')
+    # camaro_df2 = camaro_df2.rename(columns={'preds': 'camaro_pred2'})
+    # camaro_df2['camaro_pred2'] = camaro_df2['camaro_pred2'].astype(np.float32)
+    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred2']
+    # df = df.merge(camaro_df2[merge_cols], how='left')
 
     # if camaro_df is None:
     #     camaro_df = pd.read_csv('../pipeline/output/exp064_exp048_fiix_coords_scale/oof_val_preds_agg_df.csv')
@@ -48,9 +52,11 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
 
     kmat_end_df['step'] = kmat_end_df['step'].astype(int)
     kmat_end_df.loc[kmat_end_df['nfl_player_id_2'] == 0, 'nfl_player_id_2'] = -1
+    kmat_end_df['cnn_pred_Endzone'] = kmat_end_df['cnn_pred_Endzone'].astype(np.float32)
 
     kmat_side_df['step'] = kmat_side_df['step'].astype(int)
     kmat_side_df.loc[kmat_side_df['nfl_player_id_2'] == 0, 'nfl_player_id_2'] = -1
+    kmat_side_df['cnn_pred_Sideline'] = kmat_side_df['cnn_pred_Sideline'].astype(np.float32)
 
     merge_cols = ['step', 'game_play', 'nfl_player_id_1', 'nfl_player_id_2', 'cnn_pred_Endzone']
     df = df.merge(kmat_end_df[merge_cols], how='left')
@@ -58,7 +64,7 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
     merge_cols = ['step', 'game_play', 'nfl_player_id_1', 'nfl_player_id_2', 'cnn_pred_Sideline']
     df = df.merge(kmat_side_df[merge_cols], how='left')
 
-    return df
+    return reduce_dtype(df)
 
 
 def add_cnn_agg_features(df):
@@ -181,12 +187,12 @@ def add_cnn_agg_features(df):
         ])
     # df = g_conact_as_condition(df, score_columns = ['cnn_pred_Sideline_roll11', 'cnn_pred_Endzone_roll11'])
 
-    return df
+    return reduce_dtype(df)
 
 
-def agg_cnn_feature(df: pd.DataFrame) -> pd.DataFrame:
-    for column in ['cnn_pred_Sideline', 'cnn_pred_Endzone']:
+def agg_cnn_feature(df: pd.DataFrame, columns) -> pd.DataFrame:
+    for column in columns:
         for agg in ['max', 'min', 'std']:
             df[f"{column}_{agg}_pair"] = df.groupby(['game_play', 'nfl_player_id_1', 'nfl_player_id_2'])[column].transform(agg)
             df[f"{column}_{agg}_step"] = df.groupby(['game_play', 'step'])[column].transform(agg)
-    return df
+    return reduce_dtype(df)

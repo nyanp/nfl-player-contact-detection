@@ -2,6 +2,7 @@ import json
 import pickle
 import time
 from contextlib import contextmanager
+from typing import Optional
 
 import lightgbm as lgb
 import matplotlib.pyplot as plt
@@ -76,7 +77,8 @@ class LGBMSerializer:
         self.threshold_1 = threshold_1
         self.threshold_2 = threshold_2
 
-    def to_file(self, filename: str):
+    def to_file(self, filename: str, save_dir: Optional[str] = None):
+        save_dir = save_dir or '.'
         model = {
             "boosters": [b.model_to_string() for b in self.booster.boosters],
             "best_iteration": self.booster.best_iteration,
@@ -84,16 +86,17 @@ class LGBMSerializer:
             "threshold_2": self.threshold_2
         }
 
-        with open(f"{filename}_model.json", "w") as f:
+        with open(f"{save_dir}/{filename}_model.json", "w") as f:
             json.dump(model, f)
 
-        with open(f"{filename}_encoder.bin", "wb") as f:
+        with open(f"{save_dir}/{filename}_encoder.bin", "wb") as f:
             pickle.dump(self.encoders, f)
 
     @classmethod
-    def from_file(cls, filename: str):
+    def from_file(cls, filename: str, save_dir: Optional[str] = None):
+        save_dir = save_dir or '.'
 
-        with open(f"{filename}_model.json", "r") as f:
+        with open(f"{save_dir}/{filename}_model.json", "r") as f:
             model = json.load(f)
 
         cvbooster = lgb.CVBooster()
@@ -103,7 +106,7 @@ class LGBMSerializer:
         for b in cvbooster.boosters:
             b.best_iteration = cvbooster.best_iteration
 
-        with open(f"{filename}_encoder.bin", "rb") as f:
+        with open(f"{save_dir}/{filename}_encoder.bin", "rb") as f:
             encoders = pickle.load(f)
 
         return cls(

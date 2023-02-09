@@ -12,7 +12,7 @@ matplotlib.rcParams['animation.embed_limit'] = 2**128
 
 
 def find_fold(game_play: str) -> int:
-    game_fold = pd.read_csv("../input/game_fold.csv")
+    game_fold = pd.read_csv("../input/nfl-game-fold/game_fold.csv")
     return game_fold[game_fold["game"] == int(game_play[:5])]["fold"].iloc[0]
 
 

@@ -10,6 +10,8 @@ import pandas as pd
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
+from utils.general import reduce_dtype
+
 
 def visualize(list_targets, list_sources):
     for t, s in zip(list_targets[::50], list_sources[::50]):
@@ -414,4 +416,4 @@ def add_p2p_matching_features(df, regist_df):
                                                                                    }).drop(columns=["nfl_player_id"])
     print(df.shape)
     df.head()
-    return df
+    return reduce_dtype(df)

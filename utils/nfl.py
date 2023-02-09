@@ -93,12 +93,13 @@ class Config:
     HELMET_DIR: str = "../input/nfl-player-contact-detection/"
     CACHE: str = "./data/ver0121"
     USE_PRETRAINED_MODEL: bool = False
-    PRETRAINED_MODEL_PATH: str = "../input/nfl-baseline-oof"
-    SPLIT_FILE_PATH: str = "../input/game_fold.csv"
+    PRETRAINED_MODEL_PATH: Optional[str] = None
+    SPLIT_FILE_PATH: str = "../input/nfl-game-fold/game_fold.csv"
     MODEL_SIZE: ModelSize = ModelSize.LARGE
     DEBUG: bool = False
     ENABLE_MULTIPROCESS: bool = False
     CAMARO_DF_PATH: Optional[str] = None
+    CAMARO_DF2_PATH: Optional[str] = None
     KMAT_END_DF_PATH: Optional[str] = None
     KMAT_SIDE_DF_PATH: Optional[str] = None
 

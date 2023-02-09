@@ -156,7 +156,7 @@ def add_basic_features(df):
         df["direction_1"], df["orientation_1"])
     df["anglediff_dir2_ori2"] = angle_diff(
         df["direction_2"], df["orientation_2"])
-    return df
+    return reduce_dtype(df)
 
 
 def add_tracking_agg_features(df, tracking):
@@ -215,23 +215,16 @@ def add_tracking_agg_features(df, tracking):
         )
 
     df = pd.merge(df, agg, on=["game_play", "step"], how="left")
-    return df
+    return reduce_dtype(df)
 
 
-def add_distance_around_player(df):
+def add_distance_around_player(df, on_full_sample=False):
     """距離など、pairwiseに計算された特徴量を集計しなおす
     対象のプレイヤーの周りに他プレイヤーが密集しているか？
     """
-    feature_cols = [
-        "mean_distance_around_player",
-        "min_distance_around_player",
-        "std_distance_around_player",
-        "idxmin_distance_aronud_player"
-    ]
 
     stacked = pd.concat([
-        df[["game_play", "step", "nfl_player_id_1",
-            "nfl_player_id_2", "distance", "different_team"]],
+        df[["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "distance", "different_team"]],
         df[["game_play", "step", "nfl_player_id_2", "nfl_player_id_1", "distance", "different_team"]].rename(
             columns={"nfl_player_id_2": "nfl_player_id_1", "nfl_player_id_1": "nfl_player_id_2"}),
     ])
@@ -242,10 +235,25 @@ def add_distance_around_player(df):
         except ValueError:
             return np.nan
 
+    if on_full_sample:
+        # minはハードサンプルだけで見たときと同じなので飛ばす
+        feature_cols = [
+            "mean_distance_around_player_full",
+            "std_distance_around_player_full",
+            "idxmin_distance_aronud_player_full"
+        ]
+        aggfunc = ["mean", "std", _arg_min]
+    else:
+        feature_cols = [
+            "mean_distance_around_player",
+            "min_distance_around_player",
+            "std_distance_around_player",
+            "idxmin_distance_aronud_player"
+        ]
+        aggfunc = ["mean", "min", "std", _arg_min]
+
     def _merge_stacked_df(df, s, postfix=""):
-        s = s.groupby(["game_play", "step", "nfl_player_id_1"]).agg({
-            "distance": ["mean", "min", "std", _arg_min]
-        }).reset_index()
+        s = s.groupby(["game_play", "step", "nfl_player_id_1"]).agg({"distance": aggfunc}).reset_index()
         s = reduce_dtype(s)
         columns = ["nfl_player_id"] + [f"{f}{postfix}" for f in feature_cols]
         s.columns = ["game_play", "step"] + columns
@@ -265,12 +273,10 @@ def add_distance_around_player(df):
         return df
 
     def _merge_stacked_df_pairwise(df, s):
-        s = s.groupby(["game_play", "nfl_player_id_1", "nfl_player_id_2"]).agg(
-            {"distance": ["mean", "min", "std", _arg_min]}).reset_index()
+        s = s.groupby(["game_play", "nfl_player_id_1", "nfl_player_id_2"]).agg({"distance": aggfunc}).reset_index()
         s = reduce_dtype(s)
         columns = [f"{f}_pair" for f in feature_cols]
-        s.columns = ["game_play", "nfl_player_id_1",
-                     "nfl_player_id_2"] + columns
+        s.columns = ["game_play", "nfl_player_id_1", "nfl_player_id_2"] + columns
         df = pd.merge(
             df,
             s,
@@ -280,12 +286,14 @@ def add_distance_around_player(df):
         return df
 
     df = _merge_stacked_df(df, stacked, "")
-    df = _merge_stacked_df(
-        df, stacked[stacked["different_team"]], "_different_team")
+    df = _merge_stacked_df(df, stacked[stacked["different_team"]], "_different_team")
     df = _merge_stacked_df_pairwise(df, stacked)
-    df["step_diff_to_min_distance"] = df["step"] - \
-        df["idxmin_distance_aronud_player_pair"]
-    return df
+
+    if on_full_sample:
+        df["step_diff_to_min_distance_full"] = df["step"] - df["idxmin_distance_aronud_player_full_pair"]
+    else:
+        df["step_diff_to_min_distance"] = df["step"] - df["idxmin_distance_aronud_player_pair"]
+    return reduce_dtype(df)
 
 
 def add_step_feature(df, tracking):
@@ -303,7 +311,7 @@ def add_step_feature(df, tracking):
     #step_agg.columns = ["step_min_2", "step_max_2"]
     #df = pd.merge(df, step_agg, left_on="game_play", right_index=True, how="left")
     #df["step_ratio_2"] = df["step"] / df["step_max_2"]
-    return df
+    return reduce_dtype(df)
 
 
 def add_aspect_ratio_feature(df, drop_original=False):
@@ -315,7 +323,7 @@ def add_aspect_ratio_feature(df, drop_original=False):
             if drop_original:
                 del df[f"height_{view}{postfix}"]
                 del df[f"width_{view}{postfix}"]
-    return df
+    return reduce_dtype(df)
 
 
 def add_misc_features_after_agg(df):
@@ -366,7 +374,7 @@ def add_misc_features_after_agg(df):
     # 進行方向以外の加速度成分
     # df["sa_ratio_1"] = np.abs(df["sa_1"] / df["acceleration_1"])
     # df["sa_ratio_2"] = np.abs(df["sa_2"] / df["acceleration_2"])
-    return df
+    return reduce_dtype(df)
 
 
 def add_t0_feature(df, tracking):
@@ -417,7 +425,7 @@ def add_t0_feature(df, tracking):
         df["x_position_2"],
         df["y_position_2"]
     )
-    return df
+    return reduce_dtype(df)
 
 
 def add_shift_of_player(df, tracking, shifts, add_diff=False, player_id="1"):
@@ -430,7 +438,8 @@ def add_shift_of_player(df, tracking, shifts, add_diff=False, player_id="1"):
         "direction",
         "acceleration",
         "distance",
-        "sa"]
+        "sa"
+    ]
 
     for shift in shifts:
         tracking["step"] = step_orig - shift
@@ -459,7 +468,7 @@ def add_shift_of_player(df, tracking, shifts, add_diff=False, player_id="1"):
 
     tracking["step"] = step_orig
 
-    return df
+    return reduce_dtype(df)
 
 
 def tracking_prep(tracking):
@@ -570,7 +579,7 @@ def add_interceptor_feature(df):
     df = pd.merge(df, interceptor_player1, on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"], how="left")
     df = pd.merge(df, interceptor_player2, on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"], how="left")
 
-    return df
+    return reduce_dtype(df)
 
 
 def add_bbox_std_overlap_feature(df):
@@ -587,7 +596,7 @@ def add_bbox_std_overlap_feature(df):
         df[f"bbox_x_std_overlap_{view}"] = (np.minimum(xc1 + w1 / 2, xc2 + w2 / 2) - np.maximum(xc1 - w1 / 2, xc2 - w2 / 2)) / (w1 + w2)
         df[f"bbox_y_std_overlap_{view}"] = (np.minimum(yc1 + h1 / 2, yc2 + h2 / 2) - np.maximum(yc1 - h1 / 2, yc2 - h2 / 2)) / (h1 + h2)
 
-    return df
+    return reduce_dtype(df)
 
 
 def bbox_y_endzone_diff_feature(df, distance_th=3.0):
@@ -628,7 +637,7 @@ def bbox_y_endzone_diff_feature(df, distance_th=3.0):
 
     del df["neighbor_y_mean_1"]
     del df["neighbor_y_w_mean_1"]
-    return df
+    return reduce_dtype(df)
 
 
 def add_bbox_std_features(df):
@@ -637,7 +646,7 @@ def add_bbox_std_features(df):
         std_size = np.sqrt(df[f"height_{view}_mean"] * df[f"width_{view}_mean"])
         df[f'bbox_center_{view}_distance_std'] = df[f'bbox_center_{view}_distance'] / std_size
 
-    return df
+    return reduce_dtype(df)
 
 
 def add_image_coords_features(df):
@@ -681,7 +690,7 @@ def add_image_coords_features(df):
         df['p1_end_img_coords_y'].values,
         df['p2_end_img_coords_x'].values,
         df['p2_end_img_coords_y'].values)
-    return df
+    return reduce_dtype(df)
 
 
 def add_distance_agg_features(df):
@@ -697,4 +706,28 @@ def add_distance_agg_features(df):
                                         .set_index('level_3')
                                         .rename(columns={'distance': f'distance_window{roll}'})[f'distance_window{roll}'])
 
+    return reduce_dtype(df)
+
+
+def add_second_nearest_distance(df, target="1"):
+    stacked = pd.concat([
+        df[["game_play", "step", "nfl_player_id_1", "nfl_player_id_2", "distance", "different_team"]],
+        df[["game_play", "step", "nfl_player_id_2", "nfl_player_id_1", "distance", "different_team"]].rename(
+            columns={"nfl_player_id_2": "nfl_player_id_1", "nfl_player_id_1": "nfl_player_id_2"}),
+    ])
+
+    def _build(df, s, postfix=""):
+        s["distance_rank"] = s.groupby(["game_play", "step", "nfl_player_id_1"])["distance"].rank()
+        stacked_1st = s[s["distance_rank"] == 1].drop(["nfl_player_id_2", "distance_rank", "different_team"], axis=1)
+        stacked_1st.columns = ["game_play", "step", f"nfl_player_id_{target}", f"distance_1st_{target}{postfix}"]
+        stacked_2nd = s[s["distance_rank"] == 2].drop(["nfl_player_id_2", "distance_rank", "different_team"], axis=1)
+        stacked_2nd.columns = ["game_play", "step", f"nfl_player_id_{target}", f"distance_2nd_{target}{postfix}"]
+        stacked_mrg = pd.merge(stacked_1st, stacked_2nd, on=["game_play", "step", f"nfl_player_id_{target}"], how="left")
+        stacked_mrg[f"distance_diff_2nd_to_1st_{target}{postfix}"] = stacked_mrg[f"distance_2nd_{target}{postfix}"] - \
+            stacked_mrg[f"distance_1st_{target}{postfix}"]
+        df = pd.merge(df, stacked_mrg, on=["game_play", "step", f"nfl_player_id_{target}"], how="left")
+        return df
+
+    df = _build(df, stacked)
+    df = _build(df, stacked[stacked["different_team"]], "_different_team")
     return df

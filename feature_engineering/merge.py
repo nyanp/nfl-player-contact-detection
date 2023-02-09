@@ -1,13 +1,13 @@
-from feature_engineering.cnn_feats import add_cnn_agg_features, add_cnn_features, add_cnn_shift_diff_features
+from feature_engineering.cnn_feats import add_cnn_agg_features, add_cnn_features, add_cnn_shift_diff_features, agg_cnn_feature
 from feature_engineering.interpolate_features import interpolate_features
 from feature_engineering.point_set_matching import add_p2p_matching_features
 from feature_engineering.table import (
     add_aspect_ratio_feature, add_basic_features, add_bbox_features, add_bbox_std_features, add_bbox_std_overlap_feature, add_distance_agg_features,
     add_distance_around_player, add_image_coords_features, add_interceptor_feature,
-    add_misc_features_after_agg, add_shift_of_player, add_step_feature,
+    add_misc_features_after_agg, add_second_nearest_distance, add_shift_of_player, add_step_feature,
     add_t0_feature, add_tracking_agg_features, select_close_example,
     tracking_prep)
-from utils.general import timer
+from utils.general import reduce_dtype, timer
 from utils.nfl import merge_tracking
 
 
@@ -34,6 +34,10 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
     with timer("tracking_agg_features"):
         feature_df = add_basic_features(feature_df)
         feature_df = add_distance_agg_features(feature_df)
+        feature_df = add_distance_around_player(feature_df, True)
+        feature_df = add_second_nearest_distance(feature_df, "1")
+        feature_df = add_second_nearest_distance(feature_df, "2")
+
         feature_df = add_cnn_features(feature_df, *df_args)
         feature_df = add_p2p_matching_features(feature_df, regist)
 
@@ -81,14 +85,19 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
             'cnn_pred_Sideline',
             'cnn_pred_Endzone',
         ])
-        # feature_df = agg_cnn_feature(feature_df)  # add_cnn_agg_featuresに近そうなので一旦保留
+        feature_df = agg_cnn_feature(feature_df, columns=[
+            'camaro_pred',
+            # 'camaro_pred2',
+            'cnn_pred_Sideline',
+            'cnn_pred_Endzone',
+        ])
         feature_df, close_sample_index = select_close_example(feature_df)
 
         feature_df = add_bbox_features(feature_df)
         feature_df = add_step_feature(feature_df, tracking)
         feature_df = add_tracking_agg_features(feature_df, tracking)
         feature_df = add_t0_feature(feature_df, tracking)
-        feature_df = add_distance_around_player(feature_df)
+        feature_df = add_distance_around_player(feature_df, False)
         feature_df = add_aspect_ratio_feature(feature_df, False)
         feature_df = add_misc_features_after_agg(feature_df)
         feature_df = add_shift_of_player(feature_df, tracking, [-5, 5, 10], add_diff=True, player_id="1")
