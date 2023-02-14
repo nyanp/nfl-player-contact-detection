@@ -299,10 +299,12 @@ def train(cfg: Config):
         tr_helmets = read_csv_with_cache("train_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
         tr_meta = pd.read_csv(os.path.join(cfg.INPUT, "train_video_metadata.csv"),
                               parse_dates=["start_time", "end_time", "snap_time"])
-        tr_regist = match_p2p_with_cache(os.path.join(cfg.CACHE, "train_registration.f"), tracking=tr_tracking, helmets=tr_helmets, meta=tr_meta)
+        # tr_regist = match_p2p_with_cache(os.path.join(cfg.CACHE, "train_registration.f"), tracking=tr_tracking, helmets=tr_helmets, meta=tr_meta)
+        tr_regist = pd.read_csv('../input/mfl2cnnkmat0121/output/p2p_registration_residuals.csv')
 
     with timer("assign helmet metadata"):
         train_df = expand_helmet(cfg, train_df, "train")
+        del tr_helmets, tr_meta
         gc.collect()
 
     if cfg.DEBUG:
@@ -317,6 +319,7 @@ def train(cfg: Config):
     # print('hold out fold 3.', train_df.shape)
 
     train_feature_df, train_selected_index = make_features(train_df, tr_tracking, tr_regist)
+    del tr_tracking, tr_regist
     gc.collect()
 
     asdict(cfg)
@@ -455,7 +458,7 @@ def inference(cfg: Config):
     def _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args):
         with timer("make features(test)"):
             game_test_feature_df, test_selected_index = make_features(
-                game_test_df, game_test_tracking, game_test_regist, df_args, cfg.ENABLE_MULTIPROCESS)
+                game_test_df, game_test_tracking, game_test_regist, df_args, False)
 
         X_test = encoder.transform(game_test_feature_df[feature_cols])
         predicted = cvbooster.predict(X_test)
@@ -493,7 +496,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp059_exp057_oof+all',
+        EXP_NAME='exp061_camaro113',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,

@@ -19,7 +19,7 @@ def add_cnn_shift_diff_features(df: pd.DataFrame, shift_steps: List[int] = [-5, 
 
 def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, camaro_df2=None):
     if camaro_df is None:
-        camaro_df = pd.read_csv('../input/nfl-exp048/val_df.csv')
+        camaro_df = pd.read_csv('../input/camaro-exp113/exp113_val_preds.csv')
     camaro_df['camaro_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
     camaro_df['camaro_pred'] = camaro_df['camaro_pred'].astype(np.float32)
     camaro_df.loc[camaro_df['masks'], 'camaro_pred'] = camaro_df.loc[camaro_df['masks'], 'preds']

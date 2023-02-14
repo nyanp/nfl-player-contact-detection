@@ -11,7 +11,7 @@ from utils.general import reduce_dtype, timer
 from utils.nfl import merge_tracking
 
 
-def make_features(df, tracking, regist, df_args=None, enable_multiprocess=True):
+def make_features(df, tracking, regist, df_args=None, enable_multiprocess=False):
     if df_args is None:
         df_args = []
     with timer("merge"):
