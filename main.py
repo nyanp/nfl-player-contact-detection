@@ -13,7 +13,7 @@ from sklearn.model_selection import PredefinedSplit
 from feature_engineering.point_set_matching import match_p2p_with_cache
 from utils.debugger import set_debugger
 from utils.general import (LabelEncoders, LGBMSerializer, make_oof,
-                           plot_importance, timer)
+                           plot_importance, timer, reduce_mem_usage)
 from utils.metrics import binarize_pred, metrics, search_best_threshold_pair_optuna, summarize_per_play_mcc
 from utils.nfl import (
     Config,
@@ -324,13 +324,14 @@ def train(cfg: Config):
 
     asdict(cfg)
 
+    reduce_mem_usage(train_feature_df).to_feather(f'{save_dir}/train_feature_df.f')
+
     cvbooster, encoder, threshold_1, threshold_2 = train_cv(
         cfg, train_feature_df, split_defs, train_df, train_selected_index)
     gc.collect()
 
     del train_feature_df
     gc.collect()
-
 
     serializer = LGBMSerializer(cvbooster, encoder, threshold_1, threshold_2)
     serializer.to_file("lgb", save_dir)
@@ -452,6 +453,10 @@ def inference(cfg: Config):
             df_args.append(pd.read_csv(cfg.CAMARO_DF2_PATH))
         else:
             df_args.append(None)
+        if cfg.CAMARO_DF3_PATH:
+            df_args.append(pd.read_csv(cfg.CAMARO_DF3_PATH))
+        else:
+            df_args.append(None)
 
     feature_cols = cvbooster.feature_name()[0]
 
@@ -496,7 +501,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp061_camaro113',
+        EXP_NAME='exp062_camaro117',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,
