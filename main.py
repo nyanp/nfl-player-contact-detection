@@ -324,7 +324,7 @@ def train(cfg: Config):
 
     asdict(cfg)
 
-    reduce_mem_usage(train_feature_df).to_feather(f'{save_dir}/train_feature_df.f')
+    train_feature_df.to_feather(f'{save_dir}/train_feature_df.f')
 
     cvbooster, encoder, threshold_1, threshold_2 = train_cv(
         cfg, train_feature_df, split_defs, train_df, train_selected_index)
