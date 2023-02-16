@@ -509,6 +509,8 @@ def main(args):
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,
+        CAMARO_DF3_PATH=args.camaro3_path,
+        CAMARO_DF4_PATH=args.camaro4_path,
         KMAT_END_DF_PATH=args.kmat_end_path,
         KMAT_SIDE_DF_PATH=args.kmat_side_path,
         MODEL_SIZE=ModelSize.HUGE,
@@ -540,6 +542,8 @@ def parse_args():
     parser.add_argument("--lgbm_path", "-l", default="", type=str)
     parser.add_argument("--camaro_path", "-c", default="", type=str)
     parser.add_argument("--camaro2_path", "-c2", default="", type=str)
+    parser.add_argument("--camaro3_path", "-c3", default="", type=str)
+    parser.add_argument("--camaro4_path", "-c4", default="", type=str)
     parser.add_argument("--kmat_end_path", "-e", default="", type=str)
     parser.add_argument("--kmat_side_path", "-s", default="", type=str)
     parser.add_argument("--enable_multiprocess", "-m", action='store_true')
