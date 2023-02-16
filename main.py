@@ -202,7 +202,7 @@ def train_cv(
     with timer("lgb.cv"):
         split.append((np.arange(len(train_df)), np.arange(10)))
         ret = lgb.cv(lgb_params, ds_train,
-                     num_boost_round=2000,
+                     num_boost_round=4000,
                      folds=split,
                      return_cvbooster=True,
                      callbacks=[
@@ -505,7 +505,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp069_camaro048_117_any_stage2_iter2000',
+        EXP_NAME='exp070_camaro048_117_any_stage2_iter4000',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,
