@@ -45,8 +45,8 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=False)
             'cnn_pred_Sideline',
             'cnn_pred_Endzone',
             'camaro_pred',
-            'camaro_pred2',
-            #'camaro_pred3',
+            # 'camaro_pred2',
+            # 'camaro_pred3',
         ]
         offset_cols = [
             'x_rel_position_offset_on_img_End',

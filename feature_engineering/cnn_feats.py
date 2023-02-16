@@ -26,12 +26,12 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred']
     df = df.merge(camaro_df[merge_cols], how='left')
 
-    if camaro_df2 is None:
-        camaro_df2 = pd.read_csv('../input/camaro-exp117/exp117_val_any_preds.csv')
-    camaro_df2 = camaro_df2.rename(columns={'preds': 'camaro_pred2'})
-    camaro_df2['camaro_pred2'] = camaro_df2['camaro_pred2'].astype(np.float32)
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro_pred2']
-    df = df.merge(camaro_df2[merge_cols], how='left')
+    # if camaro_df2 is None:
+    #     camaro_df2 = pd.read_csv('../input/camaro-exp117/exp117_val_any_preds.csv')
+    # camaro_df2 = camaro_df2.rename(columns={'preds': 'camaro_pred2'})
+    # camaro_df2['camaro_pred2'] = camaro_df2['camaro_pred2'].astype(np.float32)
+    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro_pred2']
+    # df = df.merge(camaro_df2[merge_cols], how='left')
 
 
     # if camaro_df is None:
@@ -154,8 +154,8 @@ def add_cnn_agg_features(df):
         'cnn_pred_Sideline',
         'cnn_pred_Endzone',
         'camaro_pred',
-        'camaro_pred2',
-        'camaro_pred3',
+        # 'camaro_pred2',
+        # 'camaro_pred3',
     ]
     df = g_con_around_feature(
         df,
