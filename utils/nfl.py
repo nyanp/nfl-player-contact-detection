@@ -101,6 +101,7 @@ class Config:
     CAMARO_DF_PATH: Optional[str] = None
     CAMARO_DF2_PATH: Optional[str] = None
     CAMARO_DF3_PATH: Optional[str] = None
+    CAMARO_DF4_PATH: Optional[str] = None
     KMAT_END_DF_PATH: Optional[str] = None
     KMAT_SIDE_DF_PATH: Optional[str] = None
 
