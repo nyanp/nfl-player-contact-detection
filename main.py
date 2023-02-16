@@ -457,6 +457,10 @@ def inference(cfg: Config):
             df_args.append(pd.read_csv(cfg.CAMARO_DF3_PATH))
         else:
             df_args.append(None)
+        if cfg.CAMARO_DF4_PATH:
+            df_args.append(pd.read_csv(cfg.CAMARO_DF4_PATH))
+        else:
+            df_args.append(None)
 
     feature_cols = cvbooster.feature_name()[0]
 

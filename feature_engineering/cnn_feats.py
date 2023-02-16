@@ -43,12 +43,10 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
 
     if camaro_df4 is None:
         camaro_df4 = pd.read_csv('../input/camaro-exp123-exp124/exp123_exp124_val_preds.csv')
-    camaro_df4['camaro_pred4'] = np.nan  # np.nanじゃないとroll feature作れなかった
+    camaro_df4 = camaro_df4.rename(columns={'preds': 'camaro_pred4'})
     camaro_df4['camaro_pred4'] = camaro_df4['camaro_pred4'].astype(np.float32)
-    camaro_df4.loc[camaro_df4['masks'], 'camaro_pred4'] = camaro_df4.loc[camaro_df4['masks'], 'preds']
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred4']
     df = df.merge(camaro_df4[merge_cols], how='left')
-
 
     if kmat_end_df is None:
         end_paths = sorted(glob.glob('../input/mfl2cnnkmat0121/output/fold*_cnn_pred_end.csv'))
