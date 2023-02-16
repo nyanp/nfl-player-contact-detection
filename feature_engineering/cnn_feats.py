@@ -33,12 +33,6 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro_pred2']
     df = df.merge(camaro_df2[merge_cols], how='left')
 
-    if camaro_df3 is None:
-        camaro_df3 = pd.read_csv('../input/camaro-exp123-exp124/exp123_exp124_val_preds.csv')
-    camaro_df3 = camaro_df3.rename(columns={'preds': 'camaro_pred3'})
-    camaro_df3['camaro_pred3'] = camaro_df3['camaro_pred3'].astype(np.float32)
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred3']
-    df = df.merge(camaro_df3[merge_cols], how='left')
 
     # if camaro_df is None:
     #     camaro_df = pd.read_csv('../pipeline/output/exp064_exp048_fiix_coords_scale/oof_val_preds_agg_df.csv')
