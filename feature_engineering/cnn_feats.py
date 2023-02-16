@@ -34,22 +34,12 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred2']
     df = df.merge(camaro_df2[merge_cols], how='left')
 
-    # if camaro_df2 is None:
-    #     camaro_df2 = pd.read_csv('../input/camaro-exp117/exp117_val_any_preds.csv')
-    # camaro_df2 = camaro_df2.rename(columns={'preds': 'camaro_pred2'})
-    # camaro_df2['camaro_pred2'] = camaro_df2['camaro_pred2'].astype(np.float32)
-    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro_pred2']
-    # df = df.merge(camaro_df2[merge_cols], how='left')
-
-
-    # if camaro_df is None:
-    #     camaro_df = pd.read_csv('../pipeline/output/exp064_exp048_fiix_coords_scale/oof_val_preds_agg_df.csv')
-    # camaro_df['masks'] = camaro_df['masks'].fillna(False)
-    # camaro_df = camaro_df.rename(columns={'preds': 'camaro_pred'})
-
-    # camaro_agg_df = pd.read_csv('../pipeline/output/exp048_both_ext_blur_dynamic_normalize_coords_fix_frame_noise/oof_val_preds_agg_df.csv')
-    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'preds_max', 'preds_min', 'preds_std', 'preds_mean', 'preds_count']
-    # df = df.merge(camaro_agg_df[merge_cols], how='left')
+    if camaro_df3 is None:
+        camaro_df3 = pd.read_csv('../input/camaro-exp117/exp117_val_any_preds.csv')
+    camaro_df3 = camaro_df3.rename(columns={'preds': 'camaro_pred3'})
+    camaro_df3['camaro_pred3'] = camaro_df3['camaro_pred3'].astype(np.float32)
+    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro_pred3']
+    df = df.merge(camaro_df3[merge_cols], how='left')
 
     if kmat_end_df is None:
         end_paths = sorted(glob.glob('../input/mfl2cnnkmat0121/output/fold*_cnn_pred_end.csv'))
@@ -163,7 +153,7 @@ def add_cnn_agg_features(df):
         'cnn_pred_Endzone',
         'camaro_pred',
         'camaro_pred2',
-        # 'camaro_pred3',
+        'camaro_pred3',
     ]
     df = g_con_around_feature(
         df,
