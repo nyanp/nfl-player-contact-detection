@@ -505,7 +505,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp073_camaro128',
+        EXP_NAME='exp074_camaro128_any',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF_PATH=args.camaro_path,
         CAMARO_DF2_PATH=args.camaro2_path,

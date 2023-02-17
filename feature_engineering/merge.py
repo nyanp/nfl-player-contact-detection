@@ -38,17 +38,9 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=False)
         feature_df = add_second_nearest_distance(feature_df, "1")
         feature_df = add_second_nearest_distance(feature_df, "2")
 
-        feature_df = add_cnn_features(feature_df, *df_args)
+        feature_df, base_feature_cols = add_cnn_features(feature_df, *df_args)
         feature_df = add_p2p_matching_features(feature_df, regist)
 
-        base_feature_cols = [
-            'cnn_pred_Sideline',
-            'cnn_pred_Endzone',
-            'camaro_pred',
-            # 'camaro_pred2',
-            # 'camaro_pred3',
-            # 'camaro_pred4',
-        ]
         offset_cols = [
             'x_rel_position_offset_on_img_End',
             'y_rel_position_offset_on_img_Side'
@@ -71,7 +63,7 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=False)
             columns_to_roll=base_feature_cols + offset_cols,
             enable_multiprocess=enable_multiprocess)
 
-        feature_df = add_cnn_agg_features(feature_df)
+        feature_df = add_cnn_agg_features(feature_df, base_feature_cols)
 
         feature_df = add_cnn_shift_diff_features(feature_df, columns=base_feature_cols)
         feature_df = agg_cnn_feature(feature_df, columns=base_feature_cols)
