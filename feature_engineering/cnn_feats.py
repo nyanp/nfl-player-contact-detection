@@ -22,7 +22,7 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
         'cnn_pred_Sideline',
         'cnn_pred_Endzone',
         'camaro_preds_mean',
-        'camaro_any_preds_mean',
+        # 'camaro_any_preds_mean',
         # 'camaro_pred3',
         # 'camaro_pred4',
     ]
@@ -37,11 +37,11 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
                   'camaro_preds_mean', 'camaro_preds_count', 'camaro_preds_std', 'camaro_preds_max', 'camaro_preds_min']
     df = df.merge(camaro_df[merge_cols], how='left')
 
-    if camaro_any_df is None:
-        camaro_any_df = pd.read_csv('../input/camaro-exp128/exp128_val_frame_any_preds.csv')
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1',
-                  'camaro_any_preds_mean', 'camaro_any_preds_count', 'camaro_any_preds_std', 'camaro_any_preds_max', 'camaro_any_preds_min']
-    df = df.merge(camaro_any_df[merge_cols], how='left')
+    # if camaro_any_df is None:
+    #     camaro_any_df = pd.read_csv('../input/camaro-exp128/exp128_val_frame_any_preds.csv')
+    # merge_cols = ['game_play', 'step', 'nfl_player_id_1',
+    #               'camaro_any_preds_mean', 'camaro_any_preds_count', 'camaro_any_preds_std', 'camaro_any_preds_max', 'camaro_any_preds_min']
+    # df = df.merge(camaro_any_df[merge_cols], how='left')
 
     # if camaro_df3 is None:
     #     camaro_df3 = pd.read_csv('../input/camaro-exp125/exp125_val_any_preds.csv')
