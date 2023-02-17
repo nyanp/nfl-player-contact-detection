@@ -19,34 +19,35 @@ def add_cnn_shift_diff_features(df: pd.DataFrame, shift_steps: List[int] = [-5, 
 
 def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, camaro_df2=None, camaro_df3=None, camaro_df4=None):
     if camaro_df is None:
-        camaro_df = pd.read_csv('../input/nfl-exp048/val_df.csv')
+        # camaro_df = pd.read_csv('../input/nfl-exp048/val_df.csv')
+        camaro_df = pd.read_csv('../input/camaro-exp128/exp128_val_preds.csv')
     camaro_df['camaro_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
     camaro_df['camaro_pred'] = camaro_df['camaro_pred'].astype(np.float32)
     camaro_df.loc[camaro_df['masks'], 'camaro_pred'] = camaro_df.loc[camaro_df['masks'], 'preds']
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred']
     df = df.merge(camaro_df[merge_cols], how='left')
 
-    if camaro_df2 is None:
-        camaro_df2 = pd.read_csv('../input/camaro-exp125/exp125_val_preds.csv')
-    camaro_df2['camaro_pred2'] = np.nan  # np.nanじゃないとroll feature作れなかった
-    camaro_df2['camaro_pred2'] = camaro_df2['camaro_pred2'].astype(np.float32)
-    camaro_df2.loc[camaro_df2['masks'], 'camaro_pred2'] = camaro_df2.loc[camaro_df2['masks'], 'preds']
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred2']
-    df = df.merge(camaro_df2[merge_cols], how='left')
+    # if camaro_df2 is None:
+    #     camaro_df2 = pd.read_csv('../input/camaro-exp125/exp125_val_preds.csv')
+    # camaro_df2['camaro_pred2'] = np.nan  # np.nanじゃないとroll feature作れなかった
+    # camaro_df2['camaro_pred2'] = camaro_df2['camaro_pred2'].astype(np.float32)
+    # camaro_df2.loc[camaro_df2['masks'], 'camaro_pred2'] = camaro_df2.loc[camaro_df2['masks'], 'preds']
+    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred2']
+    # df = df.merge(camaro_df2[merge_cols], how='left')
 
-    if camaro_df3 is None:
-        camaro_df3 = pd.read_csv('../input/camaro-exp125/exp125_val_any_preds.csv')
-    camaro_df3 = camaro_df3.rename(columns={'preds': 'camaro_pred3'})
-    camaro_df3['camaro_pred3'] = camaro_df3['camaro_pred3'].astype(np.float32)
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro_pred3']
-    df = df.merge(camaro_df3[merge_cols], how='left')
+    # if camaro_df3 is None:
+    #     camaro_df3 = pd.read_csv('../input/camaro-exp125/exp125_val_any_preds.csv')
+    # camaro_df3 = camaro_df3.rename(columns={'preds': 'camaro_pred3'})
+    # camaro_df3['camaro_pred3'] = camaro_df3['camaro_pred3'].astype(np.float32)
+    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro_pred3']
+    # df = df.merge(camaro_df3[merge_cols], how='left')
 
-    if camaro_df4 is None:
-        camaro_df4 = pd.read_csv('../input/camaro-exp123-exp124/exp123_exp124_val_preds.csv')
-    camaro_df4 = camaro_df4.rename(columns={'preds': 'camaro_pred4'})
-    camaro_df4['camaro_pred4'] = camaro_df4['camaro_pred4'].astype(np.float32)
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred4']
-    df = df.merge(camaro_df4[merge_cols], how='left')
+    # if camaro_df4 is None:
+    #     camaro_df4 = pd.read_csv('../input/camaro-exp123-exp124/exp123_exp124_val_preds.csv')
+    # camaro_df4 = camaro_df4.rename(columns={'preds': 'camaro_pred4'})
+    # camaro_df4['camaro_pred4'] = camaro_df4['camaro_pred4'].astype(np.float32)
+    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred4']
+    # df = df.merge(camaro_df4[merge_cols], how='left')
 
     if kmat_end_df is None:
         end_paths = sorted(glob.glob('../input/mfl2cnnkmat0121/output/fold*_cnn_pred_end.csv'))
@@ -159,9 +160,9 @@ def add_cnn_agg_features(df):
         'cnn_pred_Sideline',
         'cnn_pred_Endzone',
         'camaro_pred',
-        'camaro_pred2',
-        'camaro_pred3',
-        'camaro_pred4',
+        # 'camaro_pred2',
+        # 'camaro_pred3',
+        # 'camaro_pred4',
     ]
     df = g_con_around_feature(
         df,
