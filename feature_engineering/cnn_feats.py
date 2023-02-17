@@ -21,22 +21,27 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
     base_feature_cols = [
         'cnn_pred_Sideline',
         'cnn_pred_Endzone',
-        'camaro_preds_mean', 'camaro_preds_count', 'camaro_preds_std', 'camaro_preds_max', 'camaro_preds_min',
-        'camaro_any_preds_mean', 'camaro_any_preds_count', 'camaro_any_preds_std', 'camaro_any_preds_max', 'camaro_any_preds_min'
+        'camaro_pred',
+        'camaro_any_pred',
         # 'camaro_pred3',
         # 'camaro_pred4',
     ]
 
     if camaro_df is None:
-        camaro_df = pd.read_csv('../input/camaro-exp128/exp128_val_frame_preds.csv')
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2',
-                  'camaro_preds_mean', 'camaro_preds_count', 'camaro_preds_std', 'camaro_preds_max', 'camaro_preds_min']
+        # camaro_df = pd.read_csv('../input/nfl-exp048/val_df.csv')
+        camaro_df = pd.read_csv('../input/camaro-exp128/exp128_val_preds.csv')
+    camaro_df['camaro_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
+    camaro_df['camaro_pred'] = camaro_df['camaro_pred'].astype(np.float32)
+    camaro_df.loc[camaro_df['masks'], 'camaro_pred'] = camaro_df.loc[camaro_df['masks'], 'preds']
+    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred']
     df = df.merge(camaro_df[merge_cols], how='left')
 
     if camaro_any_df is None:
-        camaro_any_df = pd.read_csv('../input/camaro-exp128/exp128_val_frame_any_preds.csv')
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1',
-                  'camaro_any_preds_mean', 'camaro_any_preds_count', 'camaro_any_preds_std', 'camaro_any_preds_max', 'camaro_any_preds_min']
+        camaro_any_df = pd.read_csv('../input/camaro-exp128/exp128_val_any_preds.csv')
+    camaro_any_df['camaro_any_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
+    camaro_any_df['camaro_any_pred'] = camaro_any_df['camaro_any_pred'].astype(np.float32)
+    camaro_any_df.loc[camaro_any_df['masks'], 'camaro_any_pred'] = camaro_any_df.loc[camaro_any_df['masks'], 'preds']
+    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_any_pred']
     df = df.merge(camaro_any_df[merge_cols], how='left')
 
     # if camaro_df3 is None:
