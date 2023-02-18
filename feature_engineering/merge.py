@@ -31,13 +31,14 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=False)
 
     print(feature_df.shape)
 
-    with timer("tracking_agg_features"):
+    with timer("tracking_agg_features(all)"):
         feature_df = add_basic_features(feature_df)
         feature_df = add_distance_agg_features(feature_df)
         feature_df = add_distance_around_player(feature_df, True)
         feature_df = add_second_nearest_distance(feature_df, "1")
         feature_df = add_second_nearest_distance(feature_df, "2")
 
+    with timer("cnn_p2p_features"):
         feature_df, base_feature_cols = add_cnn_features(feature_df, *df_args)
         feature_df = add_p2p_matching_features(feature_df, regist)
 
@@ -45,6 +46,7 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=False)
             'x_rel_position_offset_on_img_End',
             'y_rel_position_offset_on_img_Side'
         ]
+    with timer("interpolate_features"):
         feature_df = interpolate_features(
             feature_df,
             window_size=5,
@@ -63,12 +65,13 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=False)
             columns_to_roll=base_feature_cols + offset_cols,
             enable_multiprocess=enable_multiprocess)
 
+    with timer("cnn_agg_features"):
         feature_df = add_cnn_agg_features(feature_df, base_feature_cols)
 
         feature_df = add_cnn_shift_diff_features(feature_df, columns=base_feature_cols)
         feature_df = agg_cnn_feature(feature_df, columns=base_feature_cols)
         feature_df, close_sample_index = select_close_example(feature_df)
-
+    with timer("tracking_agg_features(selected)"):
         feature_df = add_bbox_features(feature_df)
         feature_df = add_step_feature(feature_df, tracking)
         feature_df = add_tracking_agg_features(feature_df, tracking)
