@@ -29,7 +29,7 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
 
     if camaro_df is None:
         # camaro_df = pd.read_csv('../input/nfl-exp048/val_df.csv')
-        camaro_df = pd.read_csv('../input/camaro-exp117/exp117_val_preds.csv')
+        camaro_df = pd.read_csv('../input/camaro-exp139/exp139_val_preds.csv')
     camaro_df['camaro_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
     camaro_df['camaro_pred'] = camaro_df['camaro_pred'].astype(np.float32)
     camaro_df.loc[camaro_df['masks'], 'camaro_pred'] = camaro_df.loc[camaro_df['masks'], 'preds']
@@ -37,7 +37,7 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
     df = df.merge(camaro_df[merge_cols], how='left')
 
     if camaro_any_df is None:
-        camaro_any_df = pd.read_csv('../input/camaro-exp117/exp117_val_any_preds.csv')
+        camaro_any_df = pd.read_csv('../input/camaro-exp139/exp139_val_any_preds.csv')
     camaro_any_df['camaro_any_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
     camaro_any_df['camaro_any_pred'] = camaro_any_df['camaro_any_pred'].astype(np.float32)
     camaro_any_df.loc[camaro_any_df['masks'], 'camaro_any_pred'] = camaro_any_df.loc[camaro_any_df['masks'], 'preds']
