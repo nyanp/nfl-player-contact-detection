@@ -23,8 +23,8 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
         'cnn_pred_Endzone',
         'camaro_pred',
         'camaro_any_pred',
-        'camaro_pred2',
-        'camaro_any_pred2',
+        # 'camaro_pred2',
+        # 'camaro_any_pred2',
         'camaro_pred048',
     ]
 

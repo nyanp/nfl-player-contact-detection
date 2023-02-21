@@ -94,7 +94,7 @@ class Config:
     CACHE: str = "./data/ver0121"
     USE_PRETRAINED_MODEL: bool = False
     PRETRAINED_MODEL_PATH: Optional[str] = None
-    SPLIT_FILE_PATH: str = "../input/nfl-game-fold/game_fold.csv"
+    SPLIT_FILE_PATH: str = "../input/nfl-game-fold/game_fold_5fold.csv"
     MODEL_SIZE: ModelSize = ModelSize.LARGE
     DEBUG: bool = False
     ENABLE_MULTIPROCESS: bool = False
