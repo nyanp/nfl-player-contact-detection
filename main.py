@@ -262,6 +262,7 @@ def train(cfg: Config):
 
     save_dir = f'output/{cfg.EXP_NAME}'
     os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(cfg.CACHE, exist_ok=True)
 
     with timer("load file"):
         tr_tracking = read_csv_with_cache("train_player_tracking.csv", cfg.INPUT, cfg.CACHE, usecols=TRACK_COLS)
