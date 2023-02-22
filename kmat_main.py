@@ -679,16 +679,16 @@ def cnn_features_test(train_df, tr_tracking, tr_helmets, tr_video_metadata, ):
         train_df,
         "../input/mfl2cnnkmat0219/model/weights/ex000_contdet_run070_fold123train_72crop6cbr_sc_mappretrain/final_weights.h5",
         "../input/mfl2cnnkmat0219/model/weights/map_model_final_weights.h5")
-    model = CNNEnsembler([model_0, model_1, model_2, model_3], num_output_items=2)
+    model = CNNEnsembler([model_0, model_1, model_2, model_3], num_output_items=3)
 
-    df_end, df_side = pred_by_cnn(train_df_mini, tr_tracking, tr_helmets, tr_video_metadata, game_plays, model, preprocessor, is_train_dataset=False)
+    df_end, df_side, df_end_map, df_side_map = pred_by_cnn(train_df_mini, tr_tracking, tr_helmets, tr_video_metadata, game_plays, model, preprocessor, is_train_dataset=False)
 
     df_side = postprocess_cnn_all_frame_outputs(df_side)
     df_end = postprocess_cnn_all_frame_outputs(df_end)
 
     df_end['nfl_player_id_2'] = df_end['nfl_player_id_2'].replace(0, ground_id).astype(int)
     df_side['nfl_player_id_2'] = df_side['nfl_player_id_2'].replace(0, ground_id).astype(int)
-    return df_side, df_end
+    return df_side, df_end, df_side_map, df_end_map
 
 
 if __name__ == "__main__":
@@ -733,4 +733,3 @@ if __name__ == "__main__":
     df_end.to_csv('kmat0219_end_df.csv', index=False)
     df_side_map.to_csv('kmat0219_side_map_df.csv', index=False)
     df_end_map.to_csv('kmat0219_end_map_df.csv', index=False)
-    
