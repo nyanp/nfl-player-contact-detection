@@ -1,5 +1,6 @@
 from feature_engineering.cnn_feats import add_cnn_agg_features, add_cnn_features, add_cnn_shift_diff_features, agg_cnn_feature
 from feature_engineering.interpolate_features import interpolate_features
+from feature_engineering.kalmen_filter import add_bbox_features_smooth
 from feature_engineering.point_set_matching import add_p2p_matching_features
 from feature_engineering.table import (
     add_aspect_ratio_feature, add_basic_features, add_bbox_features, add_bbox_std_features, add_bbox_std_overlap_feature, add_distance_agg_features,
@@ -11,9 +12,7 @@ from utils.general import reduce_dtype, timer
 from utils.nfl import merge_tracking
 
 
-def make_features(df, tracking, regist, df_args=None, enable_multiprocess=False):
-    if df_args is None:
-        df_args = []
+def make_features(df, tracking, regist, cnn_df_dict={}, enable_multiprocess=False):
     with timer("merge"):
         tracking = tracking_prep(tracking)
         feature_df = merge_tracking(
@@ -39,7 +38,7 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=False)
         feature_df = add_second_nearest_distance(feature_df, "2")
 
     with timer("cnn_p2p_features"):
-        feature_df, base_feature_cols = add_cnn_features(feature_df, *df_args)
+        feature_df, base_feature_cols = add_cnn_features(feature_df, cnn_df_dict)
         feature_df = add_p2p_matching_features(feature_df, regist)
 
         offset_cols = [
@@ -73,6 +72,7 @@ def make_features(df, tracking, regist, df_args=None, enable_multiprocess=False)
         feature_df, close_sample_index = select_close_example(feature_df)
     with timer("tracking_agg_features(selected)"):
         feature_df = add_bbox_features(feature_df)
+        feature_df = add_bbox_features_smooth(feature_df)
         feature_df = add_step_feature(feature_df, tracking)
         feature_df = add_tracking_agg_features(feature_df, tracking)
         feature_df = add_t0_feature(feature_df, tracking)

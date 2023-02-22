@@ -17,63 +17,65 @@ def add_cnn_shift_diff_features(df: pd.DataFrame, shift_steps: List[int] = [-5, 
     return df
 
 
-def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, camaro_any_df=None, camaro_df3=None, camaro_df4=None):
+def add_cnn_features(df, cnn_df_dict):
     base_feature_cols = [
         'cnn_pred_Sideline',
         'cnn_pred_Endzone',
-        'camaro_pred',
-        'camaro_any_pred',
-        # 'camaro_pred2',
-        # 'camaro_any_pred2',
-        'camaro_pred048',
+        'camaro1_pred',
+        'camaro1_any_pred',
+        'camaro2_pred',
+        # 'camaro1_any_pred',
     ]
 
-    if camaro_df is None:
-        # camaro_df = pd.read_csv('../input/nfl-exp048/val_df.csv')
-        camaro_df = pd.read_csv('../input/camaro-exp147/exp147_val_preds.csv')
-    camaro_df['camaro_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
-    camaro_df['camaro_pred'] = camaro_df['camaro_pred'].astype(np.float32)
-    camaro_df.loc[camaro_df['masks'], 'camaro_pred'] = camaro_df.loc[camaro_df['masks'], 'preds']
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred']
-    df = df.merge(camaro_df[merge_cols], how='left')
+    camaro1_df = cnn_df_dict.get('camaro1', pd.read_csv('../input/camaro-exp147/exp147_val_preds.csv'))
+    camaro1_any_df = cnn_df_dict.get('camaro1_any', pd.read_csv('../input/camaro-exp147/exp147_val_any_preds.csv'))
+    camaro2_df = cnn_df_dict.get('camaro2', pd.read_csv('../input/nfl-exp048/val_df.csv'))
+    # camaro2_any_df = cnn_df_dict.get('camaro2_any', pd.read_csv('../input/camaro-exp147/exp147_val_any_preds.csv'))
 
-    if camaro_any_df is None:
-        camaro_any_df = pd.read_csv('../input/camaro-exp147/exp147_val_any_preds.csv')
-    camaro_any_df['camaro_any_pred'] = np.nan  # np.nanじゃないとroll feature作れなかった
-    camaro_any_df['camaro_any_pred'] = camaro_any_df['camaro_any_pred'].astype(np.float32)
-    camaro_any_df.loc[camaro_any_df['masks'], 'camaro_any_pred'] = camaro_any_df.loc[camaro_any_df['masks'], 'preds']
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro_any_pred']
-    df = df.merge(camaro_any_df[merge_cols], how='left')
+    camaro1_df['camaro1_pred'] = np.nan
+    camaro1_df['camaro1_pred'] = camaro1_df['camaro1_pred'].astype(np.float32)
+    camaro1_df.loc[camaro1_df['masks'], 'camaro1_pred'] = camaro1_df.loc[camaro1_df['masks'], 'preds']
+    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro1_pred']
+    df = df.merge(camaro1_df[merge_cols], how='left')
 
-    # if camaro_df3 is None:
-    #     camaro_df3 = pd.read_csv('../input/camaro-exp139/exp139_val_preds.csv')
-    # camaro_df3['camaro_pred2'] = np.nan  # np.nanじゃないとroll feature作れなかった
-    # camaro_df3['camaro_pred2'] = camaro_df3['camaro_pred2'].astype(np.float32)
-    # camaro_df3.loc[camaro_df3['masks'], 'camaro_pred2'] = camaro_df3.loc[camaro_df3['masks'], 'preds']
-    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred2']
-    # df = df.merge(camaro_df3[merge_cols], how='left')
-    # if camaro_df4 is None:
-    #     camaro_df4 = pd.read_csv('../input/camaro-exp139/exp139_val_any_preds.csv')
-    # camaro_df4['camaro_any_pred2'] = np.nan  # np.nanじゃないとroll feature作れなかった
-    # camaro_df4['camaro_any_pred2'] = camaro_df4['camaro_any_pred2'].astype(np.float32)
-    # camaro_df4.loc[camaro_df4['masks'], 'camaro_any_pred2'] = camaro_df4.loc[camaro_df4['masks'], 'preds']
-    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro_any_pred2']
-    # df = df.merge(camaro_df4[merge_cols], how='left')
+    camaro1_any_df['camaro1_any_pred'] = np.nan
+    camaro1_any_df['camaro1_any_pred'] = camaro1_any_df['camaro1_any_pred'].astype(np.float32)
+    camaro1_any_df.loc[camaro1_any_df['masks'], 'camaro1_any_pred'] = camaro1_any_df.loc[camaro1_any_df['masks'], 'preds']
+    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro1_any_pred']
+    df = df.merge(camaro1_any_df[merge_cols], how='left')
 
-    camaro_df5 = pd.read_csv('../input/nfl-exp048/val_df.csv')
-    camaro_df5['camaro_pred048'] = np.nan  # np.nanじゃないとroll feature作れなかった
-    camaro_df5['camaro_pred048'] = camaro_df5['camaro_pred048'].astype(np.float32)
-    camaro_df5.loc[camaro_df5['masks'], 'camaro_pred048'] = camaro_df5.loc[camaro_df5['masks'], 'preds']
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro_pred048']
-    df = df.merge(camaro_df5[merge_cols], how='left')
+    camaro2_df['camaro2_pred'] = np.nan
+    camaro2_df['camaro2_pred'] = camaro2_df['camaro2_pred'].astype(np.float32)
+    camaro2_df.loc[camaro2_df['masks'], 'camaro2_pred'] = camaro2_df.loc[camaro2_df['masks'], 'preds']
+    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro2_pred']
+    df = df.merge(camaro2_df[merge_cols], how='left')
+
+    # camaro2_any_df['camaro2_any_pred'] = np.nan
+    # camaro2_any_df['camaro2_any_pred'] = camaro2_any_df['camaro2_any_pred'].astype(np.float32)
+    # camaro2_any_df.loc[camaro2_any_df['masks'], 'camaro2_any_pred'] = camaro2_any_df.loc[camaro2_any_df['masks'], 'preds']
+    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro2_any_pred']
+    # df = df.merge(camaro2_any_df[merge_cols], how='left')
+
+    kmat_end_df = cnn_df_dict.get('kmat_end', None)
+    kmat_side_df = cnn_df_dict.get('kmat_side', None)
+    kmat_end_map_df = cnn_df_dict.get('kmat_end_map', None)
+    kmat_side_map_df = cnn_df_dict.get('kmat_side_map', None)
 
     if kmat_end_df is None:
-        end_paths = sorted(glob.glob('../input/mfl2cnnkmat0121/output/fold*_cnn_pred_end.csv'))
+        end_paths = sorted(glob.glob('../input/mfl2cnnkmat0219/output/fold*_cnn_pred_end.csv'))
         kmat_end_df = pd.concat([pd.read_csv(p) for p in end_paths]).reset_index(drop=True)
 
     if kmat_side_df is None:
-        side_paths = sorted(glob.glob('../input/mfl2cnnkmat0121/output/fold*_cnn_pred_side.csv'))
+        side_paths = sorted(glob.glob('../input/mfl2cnnkmat0219/output/fold*_cnn_pred_side.csv'))
         kmat_side_df = pd.concat([pd.read_csv(p) for p in side_paths]).reset_index(drop=True)
+
+    if kmat_end_map_df is None:
+        end_paths = sorted(glob.glob('../input/mfl2cnnkmat0219/output/fold*_map_pred_end.csv'))
+        kmat_end_map_df = pd.concat([pd.read_csv(p) for p in end_paths]).reset_index(drop=True)
+
+    if kmat_side_map_df is None:
+        side_paths = sorted(glob.glob('../input/mfl2cnnkmat0219/output/fold*_map_pred_side.csv'))
+        kmat_side_map_df = pd.concat([pd.read_csv(p) for p in side_paths]).reset_index(drop=True)
 
     kmat_end_df['step'] = kmat_end_df['step'].astype(int)
     kmat_end_df.loc[kmat_end_df['nfl_player_id_2'] == 0, 'nfl_player_id_2'] = -1
@@ -88,6 +90,53 @@ def add_cnn_features(df, camaro_df=None, kmat_end_df=None, kmat_side_df=None, ca
 
     merge_cols = ['step', 'game_play', 'nfl_player_id_1', 'nfl_player_id_2', 'cnn_pred_Sideline']
     df = df.merge(kmat_side_df[merge_cols], how='left')
+
+    kmat_end_map_df['step'] = kmat_end_map_df['step'].astype(int)
+    kmat_side_map_df['step'] = kmat_side_map_df['step'].astype(int)
+
+    # それ以外のシングルプレイヤー系の予測値。座標予測と、単独でのコンタクト予測
+    new_columns = []
+    for pid in [1, 2]:
+        df = (pd.merge(df,
+                       kmat_end_map_df
+                       [["game_play", "step", "nfl_player_id", "pred_coords_i_Endzone",
+                         "pred_coords_j_Endzone", "player_single_contacts_Endzone"]],
+                       left_on=["game_play", "step", f"nfl_player_id_{pid}"],
+                       right_on=["game_play", "step", "nfl_player_id"], how="left").drop(columns=["nfl_player_id"])
+              .rename(columns={"pred_coords_i_Endzone": f"pred_coords_i_Endzone_pid{pid}",
+                               "pred_coords_j_Endzone": f"pred_coords_j_Endzone_pid{pid}",
+                               "player_single_contacts_Endzone": f"player_single_contacts_Endzone_pid{pid}"}))
+
+        df = (pd.merge(df,
+                       kmat_side_map_df
+                       [["game_play", "step", "nfl_player_id", "pred_coords_i_Sideline",
+                         "pred_coords_j_Sideline", "player_single_contacts_Sideline"]],
+                       left_on=["game_play", "step", f"nfl_player_id_{pid}"],
+                       right_on=["game_play", "step", "nfl_player_id"], how="left").drop(columns=["nfl_player_id"])
+              .rename(columns={"pred_coords_i_Sideline": f"pred_coords_i_Sideline_pid{pid}",
+                               "pred_coords_j_Sideline": f"pred_coords_j_Sideline_pid{pid}",
+                               "player_single_contacts_Sideline": f"player_single_contacts_Sideline_pid{pid}"}))
+        new_columns += [f"pred_coords_i_Endzone_pid{pid}", f"pred_coords_j_Endzone_pid{pid}", f"player_single_contacts_Endzone_pid{pid}",
+                        f"pred_coords_i_Sideline_pid{pid}", f"pred_coords_j_Sideline_pid{pid}", f"player_single_contacts_Sideline_pid{pid}"]
+    # add some features
+    for view in ["Endzone", "Sideline"]:
+        df[f"pred_coords_delta_i_{view}"] = np.abs(
+            df[f"pred_coords_i_{view}_pid1"] - df[f"pred_coords_i_{view}_pid2"])
+        df[f"pred_coords_delta_j_{view}"] = np.abs(
+            df[f"pred_coords_j_{view}_pid1"] - df[f"pred_coords_j_{view}_pid2"])
+        df[f"pred_coords_dist_{view}"] = np.sqrt(
+            df[f"pred_coords_delta_i_{view}"]**2 + df[f"pred_coords_delta_j_{view}"]**2)
+        df[f"player_single_contacts_multiply_{view}"] = df[f"player_single_contacts_{view}_pid1"] * \
+            df[f"player_single_contacts_{view}_pid2"]
+        df[f"pred_coords_distratio_{view}"] = df[f"pred_coords_dist_{view}"] / df["distance"]
+        df[f"player_single_pair_relative_contacts_{view}_pid1"] = df[f"cnn_pred_{view}"] / \
+            df[f"player_single_contacts_{view}_pid1"]
+        df[f"player_single_pair_relative_contacts_{view}_pid2"] = df[f"cnn_pred_{view}"] / \
+            df[f"player_single_contacts_{view}_pid2"]
+        new_columns += [f"pred_coords_delta_i_{view}", f"pred_coords_delta_j_{view}",
+                        f"pred_coords_dist_{view}", f"player_single_contacts_multiply_{view}",
+                        f"pred_coords_distratio_{view}",
+                        f"player_single_pair_relative_contacts_{view}_pid1", f"player_single_pair_relative_contacts_{view}_pid2"]
 
     return reduce_dtype(df), base_feature_cols
 
@@ -178,22 +227,22 @@ def add_cnn_agg_features(df, base_feature_cols):
         df,
         dist_thresh=1.5,
         columns=[f'{col}_roll11' for col in base_feature_cols],
-        )
+    )
     df = g_con_around_feature(
         df,
         dist_thresh=0.75,
         columns=[f'{col}_roll5' for col in base_feature_cols],
-        )
+    )
     df = p_con_shift_feature(
         df,
         step_offset=5,
         score_columns=[f'{col}_roll5' for col in base_feature_cols],
-        )
+    )
     df = p_con_shift_feature(
         df,
         step_offset=-5,
         score_columns=[f'{col}_roll5' for col in base_feature_cols]
-        )
+    )
     # df = g_conact_as_condition(df, score_columns = ['cnn_pred_Sideline_roll11', 'cnn_pred_Endzone_roll11'])
 
     return reduce_dtype(df)

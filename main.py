@@ -7,6 +7,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import wandb
+from feature_engineering.kalmen_filter import expand_helmet_smooth
 from feature_engineering.merge import make_features
 from sklearn.metrics import roc_auc_score, matthews_corrcoef
 from sklearn.model_selection import PredefinedSplit
@@ -111,29 +112,6 @@ def get_lgb_params(cfg):
     return lgb_params
 
 
-def get_pseudo_ds_train(X_train, y_train, is_ground, feature_names):
-    # pseudo labeling from exp046
-    pseudo_y_train = np.load('output/exp046_holdout_fold3_only_camaro_cnn/oof.npy')
-    serializer = LGBMSerializer.from_file("lgb", 'output/exp046_holdout_fold3_only_camaro_cnn')
-    threshold_1 = serializer.threshold_1
-    threshold_2 = serializer.threshold_2
-    pseudo_y_pred = binarize_pred(pseudo_y_train, threshold_1, threshold_2, is_ground)
-    ds_train = lgb.Dataset(X_train, pseudo_y_pred, feature_name=feature_names)
-    return ds_train
-
-
-def get_ignore_strange_ds_train(X_train, y_train, is_ground, feature_names):
-    # ignore strange examples by exp046 oof
-    THRESHOLD = 0.99
-    oof = np.load('output/exp046_holdout_fold3_only_camaro_cnn/oof.npy')
-    weights = (np.abs(y_train - oof) < THRESHOLD)
-    num_samples = len(weights)
-    ignore_samples = num_samples - weights.sum()
-    print(f'ignore {ignore_samples} samples out of {num_samples} samples')
-    ds_train = lgb.Dataset(X_train, y_train, feature_name=feature_names, weight=weights.astype(np.float32))
-    return ds_train
-
-
 def get_manuall_ignore_strange_ds_train(X_train, y_train, is_ground, feature_names, train_df):
     # ignore strange labels manually
     weights = []
@@ -189,12 +167,8 @@ def train_cv(
                 X_train[:, i] = train_df[c]
 
         gc.collect()
-        # print(f"features: {feature_names}")
         print(f"category: {list(encoder.encoders.keys())}")
 
-        # ds_train = get_pseudo_ds_train(X_train, y_train, is_ground, feature_names)
-        # ds_train = get_ignore_strange_ds_train(X_train, y_train, is_ground, feature_names)
-        # ds_train = get_manuall_ignore_strange_ds_train(X_train, y_train, is_ground, feature_names, train_df)
         ds_train = get_normal_ds_train(X_train, y_train, is_ground, feature_names)
 
         gc.collect()
@@ -261,15 +235,12 @@ def train_cv(
             per_play_mcc_df = summarize_per_play_mcc(original_df)
             per_play_mcc_df.to_csv('per_play_mcc_df.csv', index=False)
 
-            # holdout_mcc = holdout_validate(cfg, ret["cvbooster"], encoder, threshold_1, threshold_2)
-
             wandb.log(dict(
                 threshold_1=threshold_1,
                 threshold_2=threshold_2,
                 mcc=mcc,
                 mcc_ground=mcc_ground,
                 mcc_non_ground=mcc_non_ground,
-                # holdout_mcc=holdout_mcc,
                 auc=auc,
                 per_play_mcc=wandb.Table(dataframe=per_play_mcc_df)
             ))
@@ -299,24 +270,17 @@ def train(cfg: Config):
         tr_helmets = read_csv_with_cache("train_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
         tr_meta = pd.read_csv(os.path.join(cfg.INPUT, "train_video_metadata.csv"),
                               parse_dates=["start_time", "end_time", "snap_time"])
-        # tr_regist = match_p2p_with_cache(os.path.join(cfg.CACHE, "train_registration.f"), tracking=tr_tracking, helmets=tr_helmets, meta=tr_meta)
-        tr_regist = pd.read_csv('../input/mfl2cnnkmat0121/output/p2p_registration_residuals.csv')
+        tr_regist = pd.read_csv('../input/mfl2cnnkmat0219/output/p2p_registration_residuals.csv')
 
     with timer("assign helmet metadata"):
         train_df = expand_helmet(cfg, train_df, "train")
+        train_df = expand_helmet_smooth(cfg, train_df, "train")
         del tr_helmets, tr_meta
         gc.collect()
 
     if cfg.DEBUG:
         print('sample small subset for debug.')
         train_df = train_df.sample(10000).reset_index(drop=True)
-
-    # # hold out fold 3
-    # split_df = train_df[["game_play"]].copy()
-    # split_df["game"] = split_df["game_play"].str[:5].astype(int)
-    # split_df = pd.merge(split_df, split_defs, how="left")
-    # train_df = train_df.loc[split_df['fold'] != 3].reset_index(drop=True)
-    # print('hold out fold 3.', train_df.shape)
 
     train_feature_df, train_selected_index = make_features(train_df, tr_tracking, tr_regist)
     del tr_tracking, tr_regist
@@ -337,81 +301,6 @@ def train(cfg: Config):
     serializer.to_file("lgb", save_dir)
 
 
-def holdout_validate(cfg: Config, cvbooster, encoder, threshold_1, threshold_2):
-    with timer("load file"):
-        tr_tracking = read_csv_with_cache("train_player_tracking.csv", cfg.INPUT, cfg.CACHE, usecols=TRACK_COLS)
-        train_df = read_csv_with_cache("train_labels.csv", cfg.INPUT, cfg.CACHE, usecols=TRAIN_COLS)
-        split_defs = pd.read_csv(cfg.SPLIT_FILE_PATH)
-        tr_helmets = read_csv_with_cache("train_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
-        tr_meta = pd.read_csv(os.path.join(cfg.INPUT, "train_video_metadata.csv"),
-                              parse_dates=["start_time", "end_time", "snap_time"])
-        tr_regist = match_p2p_with_cache(os.path.join(cfg.CACHE, "train_registration.f"), tracking=tr_tracking, helmets=tr_helmets, meta=tr_meta)
-
-    with timer("assign helmet metadata"):
-        train_df = expand_helmet(cfg, train_df, "train")
-        gc.collect()
-
-    if cfg.DEBUG:
-        print('sample small subset for debug.')
-        train_df = train_df.sample(10000)
-
-    # hold out fold 3
-    split_df = train_df[["game_play"]].copy()
-    split_df["game"] = split_df["game_play"].str[:5].astype(int)
-    split_df = pd.merge(split_df, split_defs, how="left")
-    test_df = train_df.loc[split_df['fold'] == 3].reset_index(drop=True)
-    print('hold out fold 3.', test_df.shape)
-
-    test_tracking = tr_tracking
-    test_regist = tr_regist
-
-    df_args = [None, None, None, pd.read_csv('../pipeline/exp096_holdout3_preds.csv')]
-
-    feature_cols = cvbooster.feature_name()[0]
-
-    def _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args):
-        with timer("make features(test)"):
-            game_test_feature_df, test_selected_index = make_features(
-                game_test_df, game_test_tracking, game_test_regist, df_args, enable_multiprocess=False)
-
-        X_test = encoder.transform(game_test_feature_df[feature_cols])
-        predicted = cvbooster.predict(X_test)
-
-        del X_test
-        gc.collect()
-
-        avg_predicted = np.array(predicted).mean(axis=0)
-
-        is_ground = game_test_feature_df["nfl_player_id_2"] == -1
-        pred_binalized = binarize_pred(
-            avg_predicted, threshold_1, threshold_2, is_ground)
-
-        game_test_df = add_contact_id(game_test_df)
-        game_test_df['contact'] = 0
-        game_test_df.loc[test_selected_index, 'contact'] = pred_binalized.astype(int).values
-        return game_test_df
-
-    game_test_dfs = []
-    game_plays = test_df['game_play'].unique()
-    game_test_gb = test_df.groupby(['game_play'])
-    game_test_tracking_gb = test_tracking.groupby(['game_play'])
-    game_test_regist_gb = test_regist.groupby(['game_play'])
-    for game_play in game_plays:
-        game_test_df = game_test_gb.get_group(game_play)
-        game_test_tracking = game_test_tracking_gb.get_group(game_play)
-        game_test_regist = game_test_regist_gb.get_group(game_play)
-        game_test_df = _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args)
-        game_test_dfs.append(game_test_df)
-        gc.collect()
-    sub = pd.concat(game_test_dfs).reset_index(drop=True)
-
-    save_dir = cfg.PRETRAINED_MODEL_PATH or f'output/{cfg.EXP_NAME}'
-    sub[['contact_id', 'contact']].to_csv(f'{save_dir}/holdout_preds.csv', index=False)
-    mcc = matthews_corrcoef(test_df.contact, sub.contact)
-    print(f'hold out set score = {mcc}')
-    return mcc
-
-
 def inference(cfg: Config):
     save_dir = cfg.PRETRAINED_MODEL_PATH or f'output/{cfg.EXP_NAME}'
     serializer = LGBMSerializer.from_file("lgb", save_dir)
@@ -430,37 +319,30 @@ def inference(cfg: Config):
                            test_tracking[["step", "game_play", "datetime"]].drop_duplicates(),
                            on=["game_play", "step"], how="left")
         test_df = expand_helmet(cfg, test_df, "test")
+        test_df = expand_helmet_smooth(cfg, test_df, "test")
 
         te_helmets = read_csv_with_cache("test_baseline_helmets.csv", cfg.HELMET_DIR, cfg.CACHE)
         te_meta = pd.read_csv(os.path.join(cfg.INPUT, "test_video_metadata.csv"),
                               parse_dates=["start_time", "end_time", "snap_time"])
         test_regist = match_p2p_with_cache(os.path.join(cfg.CACHE, "test_registration.f"), tracking=test_tracking, helmets=te_helmets, meta=te_meta)
 
-        df_args = []
+        cnn_df_dict = {}
         if cfg.CAMARO_DF_PATH:
-            df_args.append(pd.read_csv(cfg.CAMARO_DF_PATH))
-        else:
-            df_args.append(None)
-        if cfg.KMAT_END_DF_PATH:
-            df_args.append(pd.read_csv(cfg.KMAT_END_DF_PATH))
-        else:
-            df_args.append(None)
-        if cfg.KMAT_SIDE_DF_PATH:
-            df_args.append(pd.read_csv(cfg.KMAT_SIDE_DF_PATH))
-        else:
-            df_args.append(None)
+            cnn_df_dict['camaro1'] = pd.read_csv(cfg.CAMARO_DF_PATH)
         if cfg.CAMARO_DF2_PATH:
-            df_args.append(pd.read_csv(cfg.CAMARO_DF2_PATH))
-        else:
-            df_args.append(None)
+            cnn_df_dict['camaro1_any'] = pd.read_csv(cfg.CAMARO_DF2_PATH)
         if cfg.CAMARO_DF3_PATH:
-            df_args.append(pd.read_csv(cfg.CAMARO_DF3_PATH))
-        else:
-            df_args.append(None)
+            cnn_df_dict['camaro3'] = pd.read_csv(cfg.CAMARO_DF3_PATH)
         if cfg.CAMARO_DF4_PATH:
-            df_args.append(pd.read_csv(cfg.CAMARO_DF4_PATH))
-        else:
-            df_args.append(None)
+            cnn_df_dict['camaro4'] = pd.read_csv(cfg.CAMARO_DF4_PATH)
+        if cfg.KMAT_END_DF_PATH:
+            cnn_df_dict['kmat_end'] = pd.read_csv(cfg.KMAT_END_DF_PATH)
+        if cfg.KMAT_SIDE_DF_PATH:
+            cnn_df_dict['kmat_side'] = pd.read_csv(cfg.KMAT_SIDE_DF_PATH)
+        if cfg.KMAT_END_MAP_DF_PATH:
+            cnn_df_dict['kmat_end_map'] = pd.read_csv(cfg.KMAT_END_MAP_DF_PATH)
+        if cfg.KMAT_SIDE_MAP_DF_PATH:
+            cnn_df_dict['kmat_side'] = pd.read_csv(cfg.KMAT_SIDE_MAP_DF_PATH)
 
     feature_cols = cvbooster.feature_name()[0]
 
@@ -505,30 +387,22 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp081_camaro_exp147_exp048',
+        EXP_NAME='exp082_kmat0219',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
-        CAMARO_DF_PATH=args.camaro_path,
+        CAMARO_DF1_PATH=args.camaro1_path,
+        CAMARO_DF1_ANY_PATH=args.camaro1_any_path,
         CAMARO_DF2_PATH=args.camaro2_path,
-        CAMARO_DF3_PATH=args.camaro3_path,
-        CAMARO_DF4_PATH=args.camaro4_path,
+        CAMARO_DF2_ANY_PATH=args.camaro2_any_path,
         KMAT_END_DF_PATH=args.kmat_end_path,
         KMAT_SIDE_DF_PATH=args.kmat_side_path,
+        KMAT_END_MAP_DF_PATH=args.kmat_end_map_path,
+        KMAT_SIDE_MAP_DF_PATH=args.kmat_side_map_path,
         MODEL_SIZE=ModelSize.HUGE,
         ENABLE_MULTIPROCESS=args.enable_multiprocess,
         DEBUG=args.debug)
     if args.debug:
         set_debugger()
         cfg.MODEL_SIZE = ModelSize.SMALL
-
-    if args.validate_only:
-        save_dir = cfg.PRETRAINED_MODEL_PATH or f'output/{cfg.EXP_NAME}'
-        serializer = LGBMSerializer.from_file("lgb", save_dir)
-        cvbooster = serializer.booster
-        encoder = serializer.encoders
-        threshold_1 = serializer.threshold_1
-        threshold_2 = serializer.threshold_2
-        holdout_validate(cfg, cvbooster, encoder, threshold_1, threshold_2)
-        return
     if not args.inference_only:
         train(cfg)
     inference(cfg)
@@ -540,12 +414,14 @@ def parse_args():
     parser.add_argument("--inference_only", "-i", action="store_true")
     parser.add_argument("--validate_only", "-v", action="store_true")
     parser.add_argument("--lgbm_path", "-l", default="", type=str)
-    parser.add_argument("--camaro_path", "-c", default="", type=str)
+    parser.add_argument("--camaro1_path", "-c1", default="", type=str)
+    parser.add_argument("--camaro1_any_path", "-c1a", default="", type=str)
     parser.add_argument("--camaro2_path", "-c2", default="", type=str)
-    parser.add_argument("--camaro3_path", "-c3", default="", type=str)
-    parser.add_argument("--camaro4_path", "-c4", default="", type=str)
+    parser.add_argument("--camaro2_any_path", "-c2a", default="", type=str)
     parser.add_argument("--kmat_end_path", "-e", default="", type=str)
     parser.add_argument("--kmat_side_path", "-s", default="", type=str)
+    parser.add_argument("--kmat_end_map_path", "-em", default="", type=str)
+    parser.add_argument("--kmat_side_map_path", "-sm", default="", type=str)
     parser.add_argument("--enable_multiprocess", "-m", action='store_true')
     return parser.parse_args()
 

@@ -98,12 +98,14 @@ class Config:
     MODEL_SIZE: ModelSize = ModelSize.LARGE
     DEBUG: bool = False
     ENABLE_MULTIPROCESS: bool = False
-    CAMARO_DF_PATH: Optional[str] = None
+    CAMARO_DF1_PATH: Optional[str] = None
+    CAMARO_DF1_ANY_PATH: Optional[str] = None
     CAMARO_DF2_PATH: Optional[str] = None
-    CAMARO_DF3_PATH: Optional[str] = None
-    CAMARO_DF4_PATH: Optional[str] = None
+    CAMARO_DF2_ANY_PATH: Optional[str] = None
     KMAT_END_DF_PATH: Optional[str] = None
     KMAT_SIDE_DF_PATH: Optional[str] = None
+    KMAT_END_MAP_DF_PATH: Optional[str] = None
+    KMAT_SIDE_MAP_DF_PATH: Optional[str] = None
 
 
 def cast_player_id(df):

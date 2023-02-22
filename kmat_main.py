@@ -442,6 +442,8 @@ def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playe
 
     df_cnn_preds_end = []
     df_cnn_preds_side = []
+    df_map_preds_end = []
+    df_map_preds_side = []
     for game_play in game_playes_to_pred:  # labels_mini["game_play"].unique():game_play_names
         print(game_play)
         for view in ["Sideline", "Endzone"]:
@@ -472,6 +474,11 @@ def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playe
             players_2 = []
             step_numbers = []
             frame_numbers = []
+            map_positions = []
+            map_player_id = []
+            player_single_contacts = []
+            step_numbers_map = []
+            frame_numbers_map = []
             is_last_batch = False
             while True:
                 step_frame_no, data = vi.get_next(only_center_frame_of_step=only_center_frame_of_step)
@@ -492,6 +499,8 @@ def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playe
                         continue
                     step_numbers += [step_frame_no[0]] * int(info["num_labels"])
                     frame_numbers += [step_frame_no[1]] * int(info["num_labels"])
+                    step_numbers_map += [step_frame_no[0]] * int(info["num_player"])
+                    frame_numbers_map += [step_frame_no[1]] * int(info["num_player"])
 
                     stacked_inputs.add(inputs)
                     stacked_targets.add(targets)
@@ -505,7 +514,7 @@ def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playe
                     _, info = stacked_info.get_if_ready(neglect_readiness=is_last_batch)
 
                     preds, inp = model.predict(inp)  # inputs include positions, (output mapping model)
-                    pred_mask, pred_label = preds # pred_label_wo_map is not using. old output
+                    pred_mask, pred_label, pred_single_contact = preds  # pred_label_wo_map is not using. old output
                     # pred_mask, pred_label, _ = preds # pred_label_wo_map is not using. old output
 
                     if draw_pred:
@@ -524,6 +533,12 @@ def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playe
                         players_1 += list(pairs[:num, 0].numpy())
                         players_2 += list(pairs[:num, 1].numpy())
 
+                    for i, [pos, ps_con, pid, num] in enumerate(zip(inp["input_player_positions"].numpy(), pred_single_contact.numpy(),
+                                                                    info["player_id"].numpy(), info["num_player"])):
+                        map_positions += list(pos[:num])
+                        map_player_id += list(pid[:num])
+                        player_single_contacts += list(ps_con[:num])
+
                     counter += batch_size
                     time_elapsed = time.time() - start_time
                     fps_inference = counter / time_elapsed
@@ -540,12 +555,21 @@ def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playe
             df_pred["frame"] = frame_numbers
             df_pred["gt_tmp"] = gt_labels
 
+            df_pred_map = pd.DataFrame(np.array(map_positions).reshape(-1, 2),
+                                       columns=[f"pred_coords_i_{view}", f"pred_coords_j_{view}"])
+            df_pred_map[f"player_single_contacts_{view}"] = player_single_contacts
+            df_pred_map["nfl_player_id"] = map_player_id
+            df_pred_map["step"] = step_numbers_map
+            df_pred_map["frame"] = frame_numbers_map
+            df_pred_map["game_play"] = game_play
             # df_pred = df_pred.groupby(["step", "game_play", "nfl_player_id_1", "nfl_player_id_2"]).mean().reset_index()
             # min, max, mean
             if view == "Sideline":
                 df_cnn_preds_side.append(df_pred)
+                df_map_preds_side.append(df_pred_map)
             else:
                 df_cnn_preds_end.append(df_pred)
+                df_map_preds_end.append(df_pred_map)
 
             show_each_matthews = False
             if show_each_matthews:
@@ -556,7 +580,10 @@ def pred_by_cnn(train_df, tr_tracking, tr_helmets, tr_video_metadata, game_playe
 
     df_cnn_preds_end = pd.concat(df_cnn_preds_end, axis=0)
     df_cnn_preds_side = pd.concat(df_cnn_preds_side, axis=0)
-    return df_cnn_preds_end, df_cnn_preds_side
+    df_map_preds_end = pd.concat(df_map_preds_end, axis=0)
+    df_map_preds_side = pd.concat(df_map_preds_side, axis=0)
+
+    return df_cnn_preds_end, df_cnn_preds_side, df_map_preds_end, df_map_preds_side
 
 
 def postprocess_cnn_all_frame_outputs(df_pred):
@@ -638,20 +665,20 @@ def cnn_features_test(train_df, tr_tracking, tr_helmets, tr_video_metadata, ):
     # べた書き
     model_0, preprocessor = load_model(
         train_df,
-        "../input/mfl2cnnkmat0121/model/weights/ex000_contdet_run054_fold012train_72crop6cbr/final_weights.h5",
-        "../input/mfl2cnnkmat0121/model/weights/map_model_final_weights.h5")
+        "../input/mfl2cnnkmat0219/model/weights/ex000_contdet_run070_fold012train_72crop6cbr_sc_mappretrain/final_weights.h5",
+        "../input/mfl2cnnkmat0219/model/weights/map_model_final_weights.h5")
     model_1, preprocessor = load_model(
         train_df,
-        "../input/mfl2cnnkmat0121/model/weights/ex000_contdet_run054_fold023train_72crop6cbr/final_weights.h5",
-        "../input/mfl2cnnkmat0121/model/weights/map_model_final_weights.h5")
+        "../input/mfl2cnnkmat0219/model/weights/ex000_contdet_run070_fold023train_72crop6cbr_sc_mappretrain/final_weights.h5",
+        "../input/mfl2cnnkmat0219/model/weights/map_model_final_weights.h5")
     model_2, preprocessor = load_model(
         train_df,
-        "../input/mfl2cnnkmat0121/model/weights/ex000_contdet_run054_fold013train_72crop6cbr/final_weights.h5",
-        "../input/mfl2cnnkmat0121/model/weights/map_model_final_weights.h5")
+        "../input/mfl2cnnkmat0219/model/weights/ex000_contdet_run070_fold013train_72crop6cbr_sc_mappretrain/final_weights.h5",
+        "../input/mfl2cnnkmat0219/model/weights/map_model_final_weights.h5")
     model_3, preprocessor = load_model(
         train_df,
-        "../input/mfl2cnnkmat0121/model/weights/ex000_contdet_run054_fold123train_72crop6cbr/final_weights.h5",
-        "../input/mfl2cnnkmat0121/model/weights/map_model_final_weights.h5")
+        "../input/mfl2cnnkmat0219/model/weights/ex000_contdet_run070_fold123train_72crop6cbr_sc_mappretrain/final_weights.h5",
+        "../input/mfl2cnnkmat0219/model/weights/map_model_final_weights.h5")
     model = CNNEnsembler([model_0, model_1, model_2, model_3], num_output_items=2)
 
     df_end, df_side = pred_by_cnn(train_df_mini, tr_tracking, tr_helmets, tr_video_metadata, game_plays, model, preprocessor, is_train_dataset=False)
@@ -701,6 +728,9 @@ if __name__ == "__main__":
     te_meta = pd.read_csv(os.path.join(cfg.INPUT, "test_video_metadata.csv"),
                           parse_dates=["start_time", "end_time", "snap_time"])
 
-    df_side, df_end = cnn_features_test(test_df, te_tracking, te_helmets, te_meta)
-    df_side.to_csv('kmat0121_side_df.csv', index=False)
-    df_end.to_csv('kmat0121_end_df.csv', index=False)
+    df_side, df_end, df_side_map, df_end_map = cnn_features_test(test_df, te_tracking, te_helmets, te_meta)
+    df_side.to_csv('kmat0219_side_df.csv', index=False)
+    df_end.to_csv('kmat0219_end_df.csv', index=False)
+    df_side_map.to_csv('kmat0219_side_map_df.csv', index=False)
+    df_end_map.to_csv('kmat0219_end_map_df.csv', index=False)
+    

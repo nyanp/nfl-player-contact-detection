@@ -652,7 +652,7 @@ def add_bbox_std_features(df):
 def add_image_coords_features(df):
     IMG_HEIGHT, IMG_WIDTH = 720, 1280
 
-    img_coords_file = "../input/mfl2cnnkmat0121/output/p2p_registration_residuals_img_coords.csv"
+    img_coords_file = "../input/mfl2cnnkmat0219/output/p2p_registration_residuals_img_coords.csv"
     df_img_coords = pd.read_csv(img_coords_file)
 
     df_img_coords['inside_img'] = (
