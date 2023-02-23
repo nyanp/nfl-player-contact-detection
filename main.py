@@ -343,7 +343,7 @@ def inference(cfg: Config):
         if cfg.KMAT_END_MAP_DF_PATH:
             cnn_df_dict['kmat_end_map'] = pd.read_csv(cfg.KMAT_END_MAP_DF_PATH)
         if cfg.KMAT_SIDE_MAP_DF_PATH:
-            cnn_df_dict['kmat_side'] = pd.read_csv(cfg.KMAT_SIDE_MAP_DF_PATH)
+            cnn_df_dict['kmat_side_map'] = pd.read_csv(cfg.KMAT_SIDE_MAP_DF_PATH)
 
     feature_cols = cvbooster.feature_name()[0]
 
