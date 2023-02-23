@@ -22,13 +22,13 @@ def add_cnn_features(df, cnn_df_dict):
         'cnn_pred_Sideline',
         'cnn_pred_Endzone',
         'camaro1_pred',
-        # 'camaro1_any_pred',
+        'camaro1_any_pred',
         'camaro2_pred',
         # 'camaro1_any_pred',
     ]
 
-    camaro1_df = cnn_df_dict.get('camaro1', pd.read_csv('../input/camaro-exp117/exp117_val_preds.csv'))
-    # camaro1_any_df = cnn_df_dict.get('camaro1_any', pd.read_csv('../input/camaro-exp147/exp147_val_any_preds.csv'))
+    camaro1_df = cnn_df_dict.get('camaro1', pd.read_csv('../input/camaro-exp147/exp147_val_preds.csv'))
+    camaro1_any_df = cnn_df_dict.get('camaro1_any', pd.read_csv('../input/camaro-exp147/exp147_val_any_preds.csv'))
     camaro2_df = cnn_df_dict.get('camaro2', pd.read_csv('../input/nfl-exp048/val_df.csv'))
     # camaro2_any_df = cnn_df_dict.get('camaro2_any', pd.read_csv('../input/camaro-exp147/exp147_val_any_preds.csv'))
 
@@ -38,11 +38,11 @@ def add_cnn_features(df, cnn_df_dict):
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro1_pred']
     df = df.merge(camaro1_df[merge_cols], how='left')
 
-    # camaro1_any_df['camaro1_any_pred'] = np.nan
-    # camaro1_any_df['camaro1_any_pred'] = camaro1_any_df['camaro1_any_pred'].astype(np.float32)
-    # camaro1_any_df.loc[camaro1_any_df['masks'], 'camaro1_any_pred'] = camaro1_any_df.loc[camaro1_any_df['masks'], 'preds']
-    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro1_any_pred']
-    # df = df.merge(camaro1_any_df[merge_cols], how='left')
+    camaro1_any_df['camaro1_any_pred'] = np.nan
+    camaro1_any_df['camaro1_any_pred'] = camaro1_any_df['camaro1_any_pred'].astype(np.float32)
+    camaro1_any_df.loc[camaro1_any_df['masks'], 'camaro1_any_pred'] = camaro1_any_df.loc[camaro1_any_df['masks'], 'preds']
+    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro1_any_pred']
+    df = df.merge(camaro1_any_df[merge_cols], how='left')
 
     camaro2_df['camaro2_pred'] = np.nan
     camaro2_df['camaro2_pred'] = camaro2_df['camaro2_pred'].astype(np.float32)
