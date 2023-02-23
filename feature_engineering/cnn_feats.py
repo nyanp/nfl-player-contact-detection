@@ -27,7 +27,7 @@ def add_cnn_features(df, cnn_df_dict):
         # 'camaro1_any_pred',
     ]
 
-    camaro1_df = cnn_df_dict.get('camaro1', pd.read_csv('../input/camaro-exp117/exp117_val_preds.csv'))
+    camaro1_df = cnn_df_dict.get('camaro1', pd.read_csv('../input/camaro-exp117/exp117_val_last_preds.csv'))
     # camaro1_any_df = cnn_df_dict.get('camaro1_any', pd.read_csv('../input/camaro-exp117/exp117_val_any_preds.csv'))
     camaro2_df = cnn_df_dict.get('camaro2', pd.read_csv('../input/nfl-exp048/val_df.csv'))
     # camaro2_any_df = cnn_df_dict.get('camaro2_any', pd.read_csv('../input/camaro-exp117/exp117_val_any_preds.csv'))
