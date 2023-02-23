@@ -328,14 +328,14 @@ def inference(cfg: Config):
         test_regist = match_p2p_with_cache(os.path.join(cfg.CACHE, "test_registration.f"), tracking=test_tracking, helmets=te_helmets, meta=te_meta)
 
         cnn_df_dict = {}
-        if cfg.CAMARO_DF_PATH:
-            cnn_df_dict['camaro1'] = pd.read_csv(cfg.CAMARO_DF_PATH)
+        if cfg.CAMARO_DF1_PATH:
+            cnn_df_dict['camaro1'] = pd.read_csv(cfg.CAMARO_DF1_PATH)
+        if cfg.CAMARO_DF1_ANY_PATH:
+            cnn_df_dict['camaro1_any'] = pd.read_csv(cfg.CAMARO_DF1_ANY_PATH)
         if cfg.CAMARO_DF2_PATH:
-            cnn_df_dict['camaro1_any'] = pd.read_csv(cfg.CAMARO_DF2_PATH)
-        if cfg.CAMARO_DF3_PATH:
-            cnn_df_dict['camaro3'] = pd.read_csv(cfg.CAMARO_DF3_PATH)
-        if cfg.CAMARO_DF4_PATH:
-            cnn_df_dict['camaro4'] = pd.read_csv(cfg.CAMARO_DF4_PATH)
+            cnn_df_dict['camaro2'] = pd.read_csv(cfg.CAMARO_DF2_PATH)
+        if cfg.CAMARO_DF2_ANY_PATH:
+            cnn_df_dict['camaro2_any'] = pd.read_csv(cfg.CAMARO_DF2_ANY_PATH)
         if cfg.KMAT_END_DF_PATH:
             cnn_df_dict['kmat_end'] = pd.read_csv(cfg.KMAT_END_DF_PATH)
         if cfg.KMAT_SIDE_DF_PATH:
@@ -388,7 +388,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp082_kmat0219',
+        EXP_NAME='exp081_exp065+kmat0219',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF1_PATH=args.camaro1_path,
         CAMARO_DF1_ANY_PATH=args.camaro1_any_path,
