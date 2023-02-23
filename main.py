@@ -347,10 +347,10 @@ def inference(cfg: Config):
 
     feature_cols = cvbooster.feature_name()[0]
 
-    def _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args):
+    def _predict_per_game(game_test_df, game_test_tracking, game_test_regist, cnn_df_dict):
         with timer("make features(test)"):
             game_test_feature_df, test_selected_index = make_features(
-                game_test_df, game_test_tracking, game_test_regist, df_args, False)
+                game_test_df, game_test_tracking, game_test_regist, cnn_df_dict, False)
 
         X_test = encoder.transform(game_test_feature_df[feature_cols])
         predicted = cvbooster.predict(X_test)
@@ -379,7 +379,7 @@ def inference(cfg: Config):
         game_test_df = game_test_gb.get_group(game_play)
         game_test_tracking = game_test_tracking_gb.get_group(game_play)
         game_test_regist = game_test_regist_gb.get_group(game_play)
-        game_test_df = _predict_per_game(game_test_df, game_test_tracking, game_test_regist, df_args)
+        game_test_df = _predict_per_game(game_test_df, game_test_tracking, game_test_regist, cnn_df_dict)
         game_test_dfs.append(game_test_df)
         gc.collect()
     test_df = pd.concat(game_test_dfs).reset_index(drop=True)
