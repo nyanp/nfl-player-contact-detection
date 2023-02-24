@@ -333,7 +333,7 @@ def p2p_registration_features(tracking, helmets, meta, view_some_results=False, 
                 trans_sources, tf_flip_targets, tf_pad_bools, tf_player_ids, top_n=num_possible_assign)
 
             list_targets, list_sources, list_residual, possible_residuals, possible_player_ids = depad_for_batch([view_target, trans_sources, residual_points, possible_residuals, possible_player_ids],
-                                                                                                                    num_points)  # リストで好きなだけ渡せるようにするか。残渣も各ポイントでほしいし。
+                                                                                                                 num_points)  # リストで好きなだけ渡せるようにするか。残渣も各ポイントでほしいし。
             """
 
             for st, [possible, current, ppids] in enumerate(zip(possible_residuals, list_residual, possible_player_ids)):
@@ -396,24 +396,25 @@ def add_p2p_matching_features(df, regist_df):
     ]
     df = pd.merge(df, regist_df.loc[regist_df["view"] == "Sideline", merge_columns], how="left",
                   left_on=["game_play", "step", "nfl_player_id_1"],
-                  right_on=["game_play", "step", "nfl_player_id"]).rename(columns={"x_position_offset_on_img": "x_position_offset_on_img_Side",
-                                                                                   "y_position_offset_on_img": "y_position_offset_on_img_Side",
-                                                                                   "x_rel_position_offset_on_img": "x_rel_position_offset_on_img_Side",
-                                                                                   "y_rel_position_offset_on_img": "y_rel_position_offset_on_img_Side",
-                                                                                   "p2p_registration_residual": "p2p_registration_residual_Side",
-                                                                                   "p2p_registration_residual_frame": "p2p_registration_residual_frame_Side",
-                                                                                   }).drop(columns=["nfl_player_id"])
-    print(df.shape)
+                  right_on=["game_play", "step", "nfl_player_id"])
+    df.rename(columns={"x_position_offset_on_img": "x_position_offset_on_img_Side",
+                       "y_position_offset_on_img": "y_position_offset_on_img_Side",
+                       "x_rel_position_offset_on_img": "x_rel_position_offset_on_img_Side",
+                       "y_rel_position_offset_on_img": "y_rel_position_offset_on_img_Side",
+                       "p2p_registration_residual": "p2p_registration_residual_Side",
+                       "p2p_registration_residual_frame": "p2p_registration_residual_frame_Side",
+                       }, inplace=True)
+    df.drop(columns=["nfl_player_id"], inplace=True)
 
     df = pd.merge(df, regist_df.loc[regist_df["view"] == "Endzone", merge_columns], how="left",
                   left_on=["game_play", "step", "nfl_player_id_1"],
-                  right_on=["game_play", "step", "nfl_player_id"]).rename(columns={"x_position_offset_on_img": "x_position_offset_on_img_End",
-                                                                                   "y_position_offset_on_img": "y_position_offset_on_img_End",
-                                                                                   "x_rel_position_offset_on_img": "x_rel_position_offset_on_img_End",
-                                                                                   "y_rel_position_offset_on_img": "y_rel_position_offset_on_img_End",
-                                                                                   "p2p_registration_residual": "p2p_registration_residual_End",
-                                                                                   "p2p_registration_residual_frame": "p2p_registration_residual_frame_End",
-                                                                                   }).drop(columns=["nfl_player_id"])
-    print(df.shape)
-    df.head()
+                  right_on=["game_play", "step", "nfl_player_id"])
+    df.rename(columns={"x_position_offset_on_img": "x_position_offset_on_img_End",
+                       "y_position_offset_on_img": "y_position_offset_on_img_End",
+                       "x_rel_position_offset_on_img": "x_rel_position_offset_on_img_End",
+                       "y_rel_position_offset_on_img": "y_rel_position_offset_on_img_End",
+                       "p2p_registration_residual": "p2p_registration_residual_End",
+                       "p2p_registration_residual_frame": "p2p_registration_residual_frame_End",
+                       }, inplace=True)
+    df.drop(columns=["nfl_player_id"], inplace=True)
     return reduce_dtype(df)

@@ -1,3 +1,4 @@
+import gc
 from typing import List
 import pandas as pd
 import numpy as np
@@ -37,6 +38,8 @@ def add_cnn_features(df, cnn_df_dict):
     camaro1_df.loc[camaro1_df['masks'], 'camaro1_pred'] = camaro1_df.loc[camaro1_df['masks'], 'preds']
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro1_pred']
     df = df.merge(camaro1_df[merge_cols], how='left')
+    del camaro1_df
+    gc.collect()
 
     # camaro1_any_df['camaro1_any_pred'] = np.nan
     # camaro1_any_df['camaro1_any_pred'] = camaro1_any_df['camaro1_any_pred'].astype(np.float32)
@@ -49,7 +52,8 @@ def add_cnn_features(df, cnn_df_dict):
     camaro2_df.loc[camaro2_df['masks'], 'camaro2_pred'] = camaro2_df.loc[camaro2_df['masks'], 'preds']
     merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2', 'camaro2_pred']
     df = df.merge(camaro2_df[merge_cols], how='left')
-
+    del camaro2_df
+    gc.collect()
     # camaro2_any_df['camaro2_any_pred'] = np.nan
     # camaro2_any_df['camaro2_any_pred'] = camaro2_any_df['camaro2_any_pred'].astype(np.float32)
     # camaro2_any_df.loc[camaro2_any_df['masks'], 'camaro2_any_pred'] = camaro2_any_df.loc[camaro2_any_df['masks'], 'preds']
@@ -90,6 +94,8 @@ def add_cnn_features(df, cnn_df_dict):
 
     merge_cols = ['step', 'game_play', 'nfl_player_id_1', 'nfl_player_id_2', 'cnn_pred_Sideline']
     df = df.merge(kmat_side_df[merge_cols], how='left')
+    del kmat_end_df, kmat_side_df
+    gc.collect()
 
     kmat_end_map_df['step'] = kmat_end_map_df['step'].astype(int)
     kmat_side_map_df['step'] = kmat_side_map_df['step'].astype(int)
@@ -97,25 +103,27 @@ def add_cnn_features(df, cnn_df_dict):
     # それ以外のシングルプレイヤー系の予測値。座標予測と、単独でのコンタクト予測
     new_columns = []
     for pid in [1, 2]:
-        df = (pd.merge(df,
-                       kmat_end_map_df
-                       [["game_play", "step", "nfl_player_id", "pred_coords_i_Endzone",
-                         "pred_coords_j_Endzone", "player_single_contacts_Endzone"]],
-                       left_on=["game_play", "step", f"nfl_player_id_{pid}"],
-                       right_on=["game_play", "step", "nfl_player_id"], how="left").drop(columns=["nfl_player_id"])
-              .rename(columns={"pred_coords_i_Endzone": f"pred_coords_i_Endzone_pid{pid}",
-                               "pred_coords_j_Endzone": f"pred_coords_j_Endzone_pid{pid}",
-                               "player_single_contacts_Endzone": f"player_single_contacts_Endzone_pid{pid}"}))
+        df = pd.merge(df,
+                      kmat_end_map_df
+                      [["game_play", "step", "nfl_player_id", "pred_coords_i_Endzone",
+                        "pred_coords_j_Endzone", "player_single_contacts_Endzone"]],
+                      left_on=["game_play", "step", f"nfl_player_id_{pid}"],
+                      right_on=["game_play", "step", "nfl_player_id"], how="left")
+        df.drop(columns=["nfl_player_id"], inpace=True)
+        df.rename(columns={"pred_coords_i_Endzone": f"pred_coords_i_Endzone_pid{pid}",
+                           "pred_coords_j_Endzone": f"pred_coords_j_Endzone_pid{pid}",
+                           "player_single_contacts_Endzone": f"player_single_contacts_Endzone_pid{pid}"}, inpace=True)
 
-        df = (pd.merge(df,
-                       kmat_side_map_df
-                       [["game_play", "step", "nfl_player_id", "pred_coords_i_Sideline",
-                         "pred_coords_j_Sideline", "player_single_contacts_Sideline"]],
-                       left_on=["game_play", "step", f"nfl_player_id_{pid}"],
-                       right_on=["game_play", "step", "nfl_player_id"], how="left").drop(columns=["nfl_player_id"])
-              .rename(columns={"pred_coords_i_Sideline": f"pred_coords_i_Sideline_pid{pid}",
-                               "pred_coords_j_Sideline": f"pred_coords_j_Sideline_pid{pid}",
-                               "player_single_contacts_Sideline": f"player_single_contacts_Sideline_pid{pid}"}))
+        df = pd.merge(df,
+                      kmat_side_map_df
+                      [["game_play", "step", "nfl_player_id", "pred_coords_i_Sideline",
+                        "pred_coords_j_Sideline", "player_single_contacts_Sideline"]],
+                      left_on=["game_play", "step", f"nfl_player_id_{pid}"],
+                      right_on=["game_play", "step", "nfl_player_id"], how="left")
+        df.drop(columns=["nfl_player_id"], inpace=True)
+        df.rename(columns={"pred_coords_i_Sideline": f"pred_coords_i_Sideline_pid{pid}",
+                           "pred_coords_j_Sideline": f"pred_coords_j_Sideline_pid{pid}",
+                           "player_single_contacts_Sideline": f"player_single_contacts_Sideline_pid{pid}"}, inpace=True)
         new_columns += [f"pred_coords_i_Endzone_pid{pid}", f"pred_coords_j_Endzone_pid{pid}", f"player_single_contacts_Endzone_pid{pid}",
                         f"pred_coords_i_Sideline_pid{pid}", f"pred_coords_j_Sideline_pid{pid}", f"player_single_contacts_Sideline_pid{pid}"]
     # add some features
@@ -137,6 +145,9 @@ def add_cnn_features(df, cnn_df_dict):
                         f"pred_coords_dist_{view}", f"player_single_contacts_multiply_{view}",
                         f"pred_coords_distratio_{view}",
                         f"player_single_pair_relative_contacts_{view}_pid1", f"player_single_pair_relative_contacts_{view}_pid2"]
+
+    del kmat_end_map_df, kmat_side_map_df
+    gc.collect()
 
     return reduce_dtype(df), base_feature_cols
 
