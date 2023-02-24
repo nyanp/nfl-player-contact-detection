@@ -50,7 +50,7 @@ def make_features(df, tracking, regist, cnn_df_dict={}, enable_multiprocess=Fals
             feature_df,
             window_sizes=[5, 11, 21],
             columns_to_roll=base_feature_cols + offset_cols,
-            fillna=True)
+            fillna=False)
 
         feature_df = add_cnn_agg_features(feature_df, base_feature_cols)
 
