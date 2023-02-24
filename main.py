@@ -388,7 +388,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp087_exp117_last_before_select_close_example',
+        EXP_NAME='exp088_exp117_last_before_select_close_example_no_fillna',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF1_PATH=args.camaro1_path,
         CAMARO_DF1_ANY_PATH=args.camaro1_any_path,
