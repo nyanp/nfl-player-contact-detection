@@ -109,10 +109,12 @@ def interpolate_features(df,
                 .sort_values('level_3')
                 .reset_index(drop=True))
 
-        if fillna:
-            for column in renamed_columns:
+        for column in renamed_columns:
+            if fillna:
                 _tmp[column] = data[column].fillna(0)
-        merged_df = _tmp[merged_columns + [f'{c}_roll{window}' for c in columns_to_roll]]
+            else:
+                _tmp[column] = data[column]
+        merged_df = _tmp[merged_columns + renamed_columns]
         df = pd.merge(df, merged_df, on=merged_columns, how='left')
 
     return df
