@@ -109,10 +109,10 @@ def add_cnn_features(df, cnn_df_dict):
                         "pred_coords_j_Endzone", "player_single_contacts_Endzone"]],
                       left_on=["game_play", "step", f"nfl_player_id_{pid}"],
                       right_on=["game_play", "step", "nfl_player_id"], how="left")
-        df.drop(columns=["nfl_player_id"], inpace=True)
+        df.drop(columns=["nfl_player_id"], inplace=True)
         df.rename(columns={"pred_coords_i_Endzone": f"pred_coords_i_Endzone_pid{pid}",
                            "pred_coords_j_Endzone": f"pred_coords_j_Endzone_pid{pid}",
-                           "player_single_contacts_Endzone": f"player_single_contacts_Endzone_pid{pid}"}, inpace=True)
+                           "player_single_contacts_Endzone": f"player_single_contacts_Endzone_pid{pid}"}, inplace=True)
 
         df = pd.merge(df,
                       kmat_side_map_df
@@ -120,10 +120,10 @@ def add_cnn_features(df, cnn_df_dict):
                         "pred_coords_j_Sideline", "player_single_contacts_Sideline"]],
                       left_on=["game_play", "step", f"nfl_player_id_{pid}"],
                       right_on=["game_play", "step", "nfl_player_id"], how="left")
-        df.drop(columns=["nfl_player_id"], inpace=True)
+        df.drop(columns=["nfl_player_id"], inplace=True)
         df.rename(columns={"pred_coords_i_Sideline": f"pred_coords_i_Sideline_pid{pid}",
                            "pred_coords_j_Sideline": f"pred_coords_j_Sideline_pid{pid}",
-                           "player_single_contacts_Sideline": f"player_single_contacts_Sideline_pid{pid}"}, inpace=True)
+                           "player_single_contacts_Sideline": f"player_single_contacts_Sideline_pid{pid}"}, inplace=True)
         new_columns += [f"pred_coords_i_Endzone_pid{pid}", f"pred_coords_j_Endzone_pid{pid}", f"player_single_contacts_Endzone_pid{pid}",
                         f"pred_coords_i_Sideline_pid{pid}", f"pred_coords_j_Sideline_pid{pid}", f"player_single_contacts_Sideline_pid{pid}"]
     # add some features
