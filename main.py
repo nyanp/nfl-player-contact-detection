@@ -388,7 +388,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp084_exp117_last',
+        EXP_NAME='exp087_exp117_last_before_select_close_example',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF1_PATH=args.camaro1_path,
         CAMARO_DF1_ANY_PATH=args.camaro1_any_path,
@@ -400,7 +400,9 @@ def main(args):
         KMAT_SIDE_MAP_DF_PATH=args.kmat_side_map_path,
         MODEL_SIZE=ModelSize.HUGE,
         ENABLE_MULTIPROCESS=args.enable_multiprocess,
-        DEBUG=args.debug)
+        DEBUG=args.debug,
+        RAW_OUTPUT=args.raw_output,
+        )
     if args.debug:
         set_debugger()
         cfg.MODEL_SIZE = ModelSize.SMALL
@@ -424,6 +426,7 @@ def parse_args():
     parser.add_argument("--kmat_end_map_path", "-em", default="", type=str)
     parser.add_argument("--kmat_side_map_path", "-sm", default="", type=str)
     parser.add_argument("--enable_multiprocess", "-m", action='store_true')
+    parser.add_argument("--raw_output", "-r", action='store_true')
     return parser.parse_args()
 
 
