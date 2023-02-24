@@ -97,6 +97,7 @@ class Config:
     SPLIT_FILE_PATH: str = "../input/nfl-game-fold/game_fold.csv"
     MODEL_SIZE: ModelSize = ModelSize.LARGE
     DEBUG: bool = False
+    RAW_OUTPUT: bool = False
     ENABLE_MULTIPROCESS: bool = False
     CAMARO_DF1_PATH: Optional[str] = None
     CAMARO_DF1_ANY_PATH: Optional[str] = None

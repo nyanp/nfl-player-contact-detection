@@ -41,35 +41,23 @@ def make_features(df, tracking, regist, cnn_df_dict={}, enable_multiprocess=Fals
         feature_df, base_feature_cols = add_cnn_features(feature_df, cnn_df_dict)
         feature_df = add_p2p_matching_features(feature_df, regist)
 
+    with timer("cnn_agg_features"):
+        feature_df = add_cnn_shift_diff_features(feature_df, columns=base_feature_cols)
+        feature_df = agg_cnn_feature(feature_df, columns=base_feature_cols)
+        feature_df, close_sample_index = select_close_example(feature_df)
+
         offset_cols = [
             'x_rel_position_offset_on_img_End',
             'y_rel_position_offset_on_img_Side'
         ]
-    with timer("interpolate_features"):
         feature_df = interpolate_features(
             feature_df,
-            window_size=5,
+            window_sizes=[5, 11, 21],
             columns_to_roll=base_feature_cols + offset_cols,
-            enable_multiprocess=enable_multiprocess)
+            fillna=True)
 
-        feature_df = interpolate_features(
-            feature_df,
-            window_size=11,
-            columns_to_roll=base_feature_cols + offset_cols,
-            enable_multiprocess=enable_multiprocess)
-
-        feature_df = interpolate_features(
-            feature_df,
-            window_size=21,
-            columns_to_roll=base_feature_cols + offset_cols,
-            enable_multiprocess=enable_multiprocess)
-
-    with timer("cnn_agg_features"):
         feature_df = add_cnn_agg_features(feature_df, base_feature_cols)
 
-        feature_df = add_cnn_shift_diff_features(feature_df, columns=base_feature_cols)
-        feature_df = agg_cnn_feature(feature_df, columns=base_feature_cols)
-        feature_df, close_sample_index = select_close_example(feature_df)
     with timer("tracking_agg_features(selected)"):
         feature_df = add_bbox_features(feature_df)
         feature_df = add_bbox_features_smooth(feature_df)

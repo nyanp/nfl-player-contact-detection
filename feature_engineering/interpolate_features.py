@@ -68,24 +68,51 @@ def _interpolate_game_play_features(args):
     return reduce_dtype(game_play_df[keep_cols])
 
 
-def interpolate_features(df, window_size=11, columns_to_roll=['cnn_pred_Sideline', 'cnn_pred_Endzone'], enable_multiprocess=True):
-    """
-    game_play, pair(player1, player2), でstep方向にroll (現状average。ガウス重みがベター？)とる。
-    画像系特徴の 予測欠損補間が主目的。特にGround接触時はヘルメットが隠れやすく、画像からの予測が存在しないところがあるはず。
-    """
-    inputs_list = [(game_play_df, window_size, columns_to_roll) for _, game_play_df in df.groupby("game_play")]
+# def interpolate_features(df, window_size=11, columns_to_roll=['cnn_pred_Sideline', 'cnn_pred_Endzone'], enable_multiprocess=True):
+#     """
+#     game_play, pair(player1, player2), でstep方向にroll (現状average。ガウス重みがベター？)とる。
+#     画像系特徴の 予測欠損補間が主目的。特にGround接触時はヘルメットが隠れやすく、画像からの予測が存在しないところがあるはず。
+#     """
+#     inputs_list = [(game_play_df, window_size, columns_to_roll) for _, game_play_df in df.groupby("game_play")]
 
-    rolled_dfs = []
-    if enable_multiprocess:
-        pool = Pool(processes=cpu_count())
-        with tqdm(total=len(inputs_list)) as t:
-            for rolled_df in pool.imap_unordered(_interpolate_game_play_features, inputs_list):
-                rolled_dfs.append(rolled_df)
-                t.update(1)
-    else:
-        for inputs in inputs_list:
-            rolled_df = _interpolate_game_play_features(inputs)
-            rolled_dfs.append(rolled_df)
-    rolled_dfs = pd.concat(rolled_dfs, axis=0).reset_index(drop=True)
-    df = pd.merge(df, rolled_dfs, how="left", on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"])
+#     rolled_dfs = []
+#     if enable_multiprocess:
+#         pool = Pool(processes=cpu_count())
+#         with tqdm(total=len(inputs_list)) as t:
+#             for rolled_df in pool.imap_unordered(_interpolate_game_play_features, inputs_list):
+#                 rolled_dfs.append(rolled_df)
+#                 t.update(1)
+#     else:
+#         for inputs in inputs_list:
+#             rolled_df = _interpolate_game_play_features(inputs)
+#             rolled_dfs.append(rolled_df)
+#     rolled_dfs = pd.concat(rolled_dfs, axis=0).reset_index(drop=True)
+#     df = pd.merge(df, rolled_dfs, how="left", on=["game_play", "step", "nfl_player_id_1", "nfl_player_id_2"])
+#     return df
+
+
+def interpolate_features(df,
+                         window_sizes=[5, 11, 21],
+                         columns_to_roll=['cnn_pred_Sideline', 'cnn_pred_Endzone', ],
+                         fillna=True):
+    merged_columns = ['game_play', 'step', 'nfl_player_id_1', 'nfl_player_id_2']
+    _tmp = df[merged_columns + columns_to_roll]
+    # rolling featureを計算する。
+    for window in window_sizes:
+        renamed_columns = [f'{c}_roll{window}' for c in columns_to_roll]
+        data = (_tmp
+                .groupby(['game_play', 'nfl_player_id_1', 'nfl_player_id_2'])[columns_to_roll]
+                .rolling(window, center=True, min_periods=1)
+                .mean()
+                .reset_index()
+                .rename(columns={c: f'{c}_roll{window}' for c in columns_to_roll})
+                .sort_values('level_3')
+                .reset_index(drop=True))
+
+        if fillna:
+            for column in renamed_columns:
+                _tmp[column] = data[column].fillna(0)
+        merged_df = _tmp[merged_columns + [f'{c}_roll{window}' for c in columns_to_roll]]
+        df = pd.merge(df, merged_df, on=merged_columns, how='left')
+
     return df
