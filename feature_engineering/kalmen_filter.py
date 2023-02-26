@@ -258,7 +258,7 @@ def run_smoother_on_helmets(phase="train", path=None, num_split_threshold_no_det
 
     draw_output = False
 
-    df_helmet = pd.read_csv(f"/kaggle/input/nfl-player-contact-detection/{phase}_baseline_helmets.csv")
+    df_helmet = pd.read_csv(f"../input/nfl-player-contact-detection/{phase}_baseline_helmets.csv")
     df_helmet["cx"] = df_helmet["left"] + df_helmet["width"] / 2
     df_helmet["cy"] = df_helmet["top"] + df_helmet["height"] / 2
 

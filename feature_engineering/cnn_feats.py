@@ -31,12 +31,12 @@ def add_cnn_features(df, cnn_df_dict):
     if 'camaro1' in cnn_df_dict.keys():
         camaro1_df = cnn_df_dict['camaro1']
     else:
-        camaro1_df = pd.read_csv('../input/camaro-exp158/exp158_val_preds.csv')
+        camaro1_df = pd.read_csv('../input/camaro-exp173-exp174/exp173_exp174_val_preds.csv')
 
-    if 'camaro1_any' in cnn_df_dict.keys():
-        camaro1_any_df = cnn_df_dict['camaro1_any']
-    else:
-        camaro1_any_df = pd.read_csv('../input/camaro-exp158/exp158_val_any_preds.csv')
+    # if 'camaro1_any' in cnn_df_dict.keys():
+    #     camaro1_any_df = cnn_df_dict['camaro1_any']
+    # else:
+    #     camaro1_any_df = pd.read_csv('../input/camaro-exp173-exp174/exp173_exp174_val_any_preds.csv')
 
     if 'camaro2' in cnn_df_dict.keys():
         camaro2_df = cnn_df_dict['camaro2']
@@ -51,11 +51,11 @@ def add_cnn_features(df, cnn_df_dict):
     del camaro1_df
     gc.collect()
 
-    camaro1_any_df['camaro1_any_pred'] = np.nan
-    camaro1_any_df['camaro1_any_pred'] = camaro1_any_df['camaro1_any_pred'].astype(np.float32)
-    camaro1_any_df.loc[camaro1_any_df['masks'], 'camaro1_any_pred'] = camaro1_any_df.loc[camaro1_any_df['masks'], 'preds']
-    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro1_any_pred']
-    df = df.merge(camaro1_any_df[merge_cols], how='left')
+    # camaro1_any_df['camaro1_any_pred'] = np.nan
+    # camaro1_any_df['camaro1_any_pred'] = camaro1_any_df['camaro1_any_pred'].astype(np.float32)
+    # camaro1_any_df.loc[camaro1_any_df['masks'], 'camaro1_any_pred'] = camaro1_any_df.loc[camaro1_any_df['masks'], 'preds']
+    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro1_any_pred']
+    # df = df.merge(camaro1_any_df[merge_cols], how='left')
 
     camaro2_df['camaro2_pred'] = np.nan
     camaro2_df['camaro2_pred'] = camaro2_df['camaro2_pred'].astype(np.float32)
