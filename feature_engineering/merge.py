@@ -12,7 +12,7 @@ from utils.general import reduce_dtype, timer
 from utils.nfl import merge_tracking
 
 
-def make_features(df, tracking, regist, cnn_df_dict={}, enable_multiprocess=False):
+def make_features(df, tracking, regist, cnn_df_dict={}):
     with timer("merge"):
         tracking = tracking_prep(tracking)
         feature_df = merge_tracking(
