@@ -200,9 +200,8 @@ def add_tracking_agg_features(df, tracking):
                 "game_play",
                 "step",
                 "team"],
-            how="left").drop(
-            "team",
-            axis=1)
+            how="left")
+        df.drop("team", axis=1, inplace=True)
 
         player_agg_renames = {c: c + postfix for c in player_agg.columns}
         player_agg_renames["nfl_player_id"] = f"nfl_player_id{postfix}"
