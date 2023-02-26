@@ -1,5 +1,6 @@
 import argparse
 import gc
+import glob
 import os
 import pickle
 from dataclasses import asdict
@@ -246,6 +247,8 @@ def inference(cfg: Config, scaler, use_cols):
         game_test_tracking = game_test_tracking_gb.get_group(game_play)
         game_test_regist = game_test_regist_gb.get_group(game_play)
         _make_features_per_game(game_play, game_test_df, game_test_tracking, game_test_regist, cnn_df_dict={})
+    df = pd.concat([pd.read_feather(p) for p in glob.glob('*_preprocessed_feature_df_for_seq_model.f')]).reset_index(drop=True)
+    df.to_feather('test_preprocessed_feature_df_for_seq_model.f')
 
 
 def main(args):
