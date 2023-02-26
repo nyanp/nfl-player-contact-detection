@@ -175,9 +175,9 @@ def train(cfg: Config, inference_only=False):
     os.makedirs(cfg.CACHE, exist_ok=True)
 
     if inference_only:
-        with open(f'{save_dir}/scaler.pkl', 'rb') as f:
+        with open(f'../input/features-for-seq-model/scaler.pkl', 'rb') as f:
             scaler = pickle.load(f)
-        with open(f'{save_dir}/col_info.pkl', 'rb') as f:
+        with open(f'../input/features-for-seq-model/col_info.pkl', 'rb') as f:
             col_info = pickle.load(f)
         use_cols = col_info['p1'] + col_info['p1_additional'] + col_info['p2'] + col_info['pair'] + col_info['global']
         return scaler, use_cols
