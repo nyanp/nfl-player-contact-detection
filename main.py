@@ -4,6 +4,7 @@ import os
 from dataclasses import asdict
 
 import lightgbm as lgb
+import time
 import numpy as np
 import pandas as pd
 import wandb
@@ -37,6 +38,7 @@ def get_lgb_params(cfg):
         "max_depth": -1,
         "num_leaves": 40,
         "verbose": -1,
+        "seed": int(time.time())
     }
     if cfg.MODEL_SIZE == ModelSize.SMALL:
         lgb_params["learning_rate"] = 0.1
@@ -322,7 +324,7 @@ def inference(cfg: Config):
 
 def main(args):
     cfg = Config(
-        EXP_NAME='exp091_camaro_exp173_174',
+        EXP_NAME='exp092_camaro_exp184_185',
         PRETRAINED_MODEL_PATH=args.lgbm_path,
         CAMARO_DF1_PATH=args.camaro1_path,
         CAMARO_DF1_ANY_PATH=args.camaro1_any_path,

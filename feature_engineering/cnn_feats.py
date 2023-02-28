@@ -31,12 +31,12 @@ def add_cnn_features(df, cnn_df_dict):
     if 'camaro1' in cnn_df_dict.keys():
         camaro1_df = cnn_df_dict['camaro1']
     else:
-        camaro1_df = pd.read_csv('../input/camaro-exp173-exp174/exp173_exp174_val_preds.csv')
+        camaro1_df = pd.read_csv('../input/camaro-exp184-exp185/exp184_exp185_val_preds.csv')
 
     # if 'camaro1_any' in cnn_df_dict.keys():
     #     camaro1_any_df = cnn_df_dict['camaro1_any']
     # else:
-    #     camaro1_any_df = pd.read_csv('../input/camaro-exp173-exp174/exp173_exp174_val_any_preds.csv')
+    #     camaro1_any_df = pd.read_csv('../input/camaro-exp184-exp185/exp184_exp185_val_any_preds.csv')
 
     if 'camaro2' in cnn_df_dict.keys():
         camaro2_df = cnn_df_dict['camaro2']
