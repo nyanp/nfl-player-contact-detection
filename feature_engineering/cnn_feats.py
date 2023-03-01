@@ -25,23 +25,28 @@ def add_cnn_features(df, cnn_df_dict):
         'camaro1_pred',
         'camaro1_any_pred',
         'camaro2_pred',
-        # 'camaro1_any_pred',
+        'camaro2_any_pred',
     ]
 
     if 'camaro1' in cnn_df_dict.keys():
         camaro1_df = cnn_df_dict['camaro1']
     else:
-        camaro1_df = pd.read_csv('../input/camaro-exp188/exp188_val_last_preds.csv')
+        camaro1_df = pd.read_csv('../input/camaro-exp139/exp139_val_last_preds.csv')
 
     if 'camaro1_any' in cnn_df_dict.keys():
         camaro1_any_df = cnn_df_dict['camaro1_any']
     else:
-        camaro1_any_df = pd.read_csv('../input/camaro-exp188/exp188_val_last_any_preds.csv')
+        camaro1_any_df = pd.read_csv('../input/camaro-exp139/exp139_val_last_any_preds.csv')
 
     if 'camaro2' in cnn_df_dict.keys():
         camaro2_df = cnn_df_dict['camaro2']
     else:
-        camaro2_df = pd.read_csv('../input/nfl-exp048/val_df.csv')
+        camaro2_df = pd.read_csv('../input/camaro-exp188/exp188_val_last_preds.csv')
+
+    if 'camaro2_any' in cnn_df_dict.keys():
+        camaro2_any_df = cnn_df_dict['camaro2_any']
+    else:
+        camaro2_any_df = pd.read_csv('../input/camaro-exp188/exp188_val_last_any_preds.csv')
 
     camaro1_df['camaro1_pred'] = np.nan
     camaro1_df['camaro1_pred'] = camaro1_df['camaro1_pred'].astype(np.float32)
@@ -72,11 +77,12 @@ def add_cnn_features(df, cnn_df_dict):
     df = df.merge(camaro2_df[merge_cols], how='left')
     del camaro2_df
     gc.collect()
-    # camaro2_any_df['camaro2_any_pred'] = np.nan
-    # camaro2_any_df['camaro2_any_pred'] = camaro2_any_df['camaro2_any_pred'].astype(np.float32)
-    # camaro2_any_df.loc[camaro2_any_df['masks'], 'camaro2_any_pred'] = camaro2_any_df.loc[camaro2_any_df['masks'], 'preds']
-    # merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro2_any_pred']
-    # df = df.merge(camaro2_any_df[merge_cols], how='left')
+
+    camaro2_any_df['camaro2_any_pred'] = np.nan
+    camaro2_any_df['camaro2_any_pred'] = camaro2_any_df['camaro2_any_pred'].astype(np.float32)
+    camaro2_any_df.loc[camaro2_any_df['masks'], 'camaro2_any_pred'] = camaro2_any_df.loc[camaro2_any_df['masks'], 'preds']
+    merge_cols = ['game_play', 'step', 'nfl_player_id_1', 'camaro2_any_pred']
+    df = df.merge(camaro2_any_df[merge_cols], how='left')
 
     kmat_end_df = cnn_df_dict.get('kmat_end', None)
     kmat_side_df = cnn_df_dict.get('kmat_side', None)
