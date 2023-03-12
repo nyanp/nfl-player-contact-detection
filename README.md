@@ -8,7 +8,7 @@ K_mat's NN training:
 https://www.kaggle.com/code/kmat2019/nfl-training-sample-4thplace-kmatpart
 
 Camaro's NN training:  
-https://github.com/bamps53/kaggle-nfl2022  
+https://github.com/bamps53/kaggle-nfl2022-4h-place-solution
 
 As for details of our entire solution, Please check out this discussion.  
 https://www.kaggle.com/competitions/nfl-player-contact-detection/discussion/391761
