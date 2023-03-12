@@ -2,7 +2,6 @@
 *.pth
 *.zip
 *.pkl
-*.ipynb
 results/
 *.hdf5
 *.ckpt
